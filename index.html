@@ -20,7 +20,7 @@
 .header-title{font-family:"Libre Baskerville",serif;font-size:16px;font-weight:700;color:#fff;line-height:1.2;}
 .header-sub{font-size:10px;letter-spacing:3px;color:rgba(255,255,255,0.45);text-transform:uppercase;margin-top:3px;}
 
-.role-bar{background:rgba(0,0,0,0.2);border-top:1px solid rgba(255,255,255,0.08);}
+.role-bar{background:rgba(0,0,0,0.25);border-top:1px solid rgba(255,255,255,0.1);}
 .role-bar-inner{max-width:960px;margin:0 auto;padding:10px 24px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
 .role-label{font-size:10px;letter-spacing:2px;color:rgba(255,255,255,0.35);text-transform:uppercase;margin-right:4px;}
 .role-btn{padding:5px 16px;border-radius:20px;font-size:11px;font-weight:700;letter-spacing:0.5px;cursor:pointer;transition:all 0.2s;border:1.5px solid transparent;}
@@ -130,13 +130,13 @@ const LOGO="iVBORw0KGgoAAAANSUhEUgAAAHgAAAB4CAIAAAC2BqGFAABEOklEQVR42u19d5gUxRZv
       <span class="role-label">Filter by role:</span>
       <button class="role-btn active-all" data-role="All" onclick="filterRole(this)">👥 All Roles</button>
       <button class="role-btn inactive" data-role="PM"
-        style="color:#1A3A6E;border-color:#2563A8;"
+        style="background:#fff;color:#1A3A6E;border-color:#2563A8;"
         onclick="filterRole(this)">🏢 PM</button>
       <button class="role-btn inactive" data-role="APM"
-        style="color:#4A1A8A;border-color:#7B3FC7;"
+        style="background:#fff;color:#4A1A8A;border-color:#7B3FC7;"
         onclick="filterRole(this)">🏗️ APM</button>
       <button class="role-btn inactive" data-role="Sales"
-        style="color:#0A3F6A;border-color:#0D6EAA;"
+        style="background:#fff;color:#0A3F6A;border-color:#0D6EAA;"
         onclick="filterRole(this)">🤝 Sales</button>
     </div>
   </div>
@@ -176,6 +176,22 @@ const LOGO="iVBORw0KGgoAAAANSUhEUgAAAHgAAAB4CAIAAAC2BqGFAABEOklEQVR42u19d5gUxRZv
 
   <div class="section-heading">Role Guide</div>
   <div class="role-legend">
+    <div class="legend-item">
+      <div class="legend-dot" style="background:#2563A8;"></div>
+      <span class="legend-label">PM</span>
+      <span class="legend-desc">Project Manager — leads the project</span>
+    </div>
+    <div class="legend-item">
+      <div class="legend-dot" style="background:#7B3FC7;"></div>
+      <span class="legend-label">APM</span>
+      <span class="legend-desc">Asst. Project Manager — supports operations</span>
+    </div>
+    <div class="legend-item">
+      <div class="legend-dot" style="background:#0D6EAA;"></div>
+      <span class="legend-label">Sales</span>
+      <span class="legend-desc">Delivers handoff package to PM</span>
+    </div>
+  </div>
 
   <!-- Steps -->
 
