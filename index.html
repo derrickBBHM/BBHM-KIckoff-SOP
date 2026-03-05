@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+
 <html lang="en">
 <head>
   <meta charset="UTF-8"/>
@@ -501,8 +502,8 @@ return `
 function renderSopPage(){
 const sop=SOPS.find(s=>s.id===currentSopId);
 if(!sop) return “<p>Not found</p>”;
-const allRoles=[…new Set(sop.steps.flatMap(s=>s.items.map(i=>i.role)))];
-const roleBtns=[“All”,…allRoles].map(r=>{
+const allRoles=Array.from(new Set(sop.steps.flatMap(s=>s.items.map(i=>i.role))));
+const roleBtns=[“All”].concat(allRoles).map(r=>{
 const rc=RC[r]||{};
 const isAll=r===“All”;
 return `<button class="role-btn ${isAll?"active-all":""}" data-role="${r}" style="${isAll?"":"background:#fff;color:"+rc.text+";border-color:"+rc.border+";"}" onclick="filterRole(this)">${r==="All"?"👥 All":r==="PM"?"🏢 PM":r==="APM"?"🏗️ APM":r==="Sales"?"🤝 Sales":"📐 "+r}</button>`;
@@ -567,7 +568,7 @@ container.innerHTML=””;
 sop.steps.forEach((step,idx)=>{
 const visItems=step.items.filter(it=>activeRole===“All”||it.role===activeRole);
 if(!visItems.length) return;
-const allRolesInStep=[…new Set(step.items.map(i=>i.role))];
+const allRolesInStep=Array.from(new Set(step.items.map(i=>i.role)));
 const isOpen=expanded[idx]!==false;
 const card=document.createElement(“div”);
 card.className=“step-card”;
@@ -590,7 +591,7 @@ const fc=document.getElementById(“flowchart”);
 if(!sop||!fc) return;
 let html=`<div class="flow-node ftrigger"><span style="font-size:14px;">⚡</span><span class="flow-label">${sop.trigger}</span></div><div class="flow-arrow">↓</div>`;
 sop.steps.forEach((s,i)=>{
-const roles=[…new Set(s.items.map(it=>it.role))].join(” · “);
+const roles=Array.from(new Set(s.items.map(it=>it.role))).join(” · “);
 html+=`<div class="flow-node"><div class="flow-num">${i+1}</div><div style="flex:1"><div class="flow-label">${s.title}</div><div class="flow-role">${roles}</div></div><span style="font-size:14px;">${s.icon}</span></div>`;
 if(i<sop.steps.length-1) html+=`<div class="flow-arrow">↓</div>`;
 });
