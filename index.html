@@ -66,7 +66,13 @@
     /* DASHBOARD */
     .dash-main{max-width:1200px;margin:0 auto;padding:20px 24px 80px;display:flex;flex-direction:column;gap:8px;}
     /* CATEGORIES */
-    .cat-section{margin-bottom:12px;background:#fff;border-radius:14px;border:1px solid #DDE8F4;overflow:hidden;box-shadow:0 1px 4px rgba(13,43,78,0.05);}
+    .cat-section{margin-bottom:12px;background:#fff;border-radius:14px;border:1px solid #DDE8F4;overflow:hidden;box-shadow:0 1px 4px rgba(13,43,78,0.05);transition:box-shadow 0.2s,transform 0.2s;}
+    .cat-section.cat-dragging{opacity:0.4;transform:scale(0.98);}
+    .cat-section.cat-drag-over{box-shadow:0 0 0 3px #2563A8;transform:translateY(-2px);}
+    .cat-drag-handle{font-size:14px;color:rgba(0,0,0,0.25);cursor:grab;padding:2px 4px;flex-shrink:0;display:none;user-select:none;}
+    .cat-drag-handle:hover{color:#2563A8;}
+    .cat-drag-handle:active{cursor:grabbing;}
+    .edit-mode-cat .cat-drag-handle{display:block;}
     .cat-header{display:flex;align-items:center;gap:12px;padding:16px 20px;cursor:pointer;user-select:none;transition:background 0.15s;}
     .cat-header:hover{background:#F7FAFF;}
     .cat-icon{width:36px;height:36px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;}
@@ -824,8 +830,13 @@ function renderHub(){
     const addCard=editMode?`<div class="card-flow-arrow" style="align-self:center;"><div class="card-flow-arrow-inner" style="border-color:#C5D4E8;color:#C5D4E8;">→</div></div><div class="add-sop-card" style="display:flex;width:240px;flex-shrink:0;margin:7px;" onclick="openCardModal(null,'${cat.id}')"><span class="add-sop-icon">➕</span><span>Add SOP</span></div>`:"";
     const editCatBtn=editMode?`<button class="cat-edit-btn" onclick="event.stopPropagation();openCatModal('${cat.id}')">✏️ Edit</button>`:"";
     const isOpen=!catCollapsed[cat.id];
-    return`<div class="cat-section" data-cat="${cat.id}">
+    const catDragAttrs = editMode
+      ? `draggable="true" ondragstart="catDragStart(event,'${cat.id}')" ondragover="catDragOver(event,'${cat.id}')" ondragleave="catDragLeave(event)" ondrop="catDragDrop(event,'${cat.id}')" ondragend="catDragEnd(event)"`
+      : "";
+    const dragHandle = editMode ? `<span class="cat-drag-handle" title="Drag to reorder">⠿</span>` : "";
+    return`<div class="cat-section" data-cat="${cat.id}" ${catDragAttrs}>
       <div class="cat-header" onclick="toggleCat('${cat.id}')">
+        ${dragHandle}
         <div class="cat-icon" style="background:${cat.color}20;color:${cat.color};">${cat.icon}</div>
         <span class="cat-title">${cat.label}</span>
         <span class="cat-count">${sopList.filter(s=>s.steps&&s.steps.length>0).length}/${sopList.length} built</span>
@@ -875,11 +886,56 @@ function renderHub(){
       <div class="workflow-steps">${wfNodes}</div>
     </div>
   </div>
-  <div class="dash-main">
+  <div class="dash-main ${editMode?'edit-mode-cat':''}">
     <div id="no-results" class="no-results" style="display:none;">No SOPs match your search.</div>
     ${catSections}
     ${editMode?`<div style="padding:0 0 4px;"><button style="display:block;width:100%;background:transparent;border:2px dashed #C5D4E8;border-radius:14px;padding:14px;text-align:center;cursor:pointer;color:#8AA0BC;font-size:13px;font-weight:700;transition:all 0.2s;" onmouseover="this.style.borderColor='#7B3FC7';this.style.color='#7B3FC7';this.style.background='#F5F0FF'" onmouseout="this.style.borderColor='#C5D4E8';this.style.color='#8AA0BC';this.style.background='transparent'" onclick="openCatModal(null)">➕ Add New Category</button></div>`:""}
   </div>`;
+}
+
+// ═══════════════════════════════════════════
+// DRAG & DROP — reorder CATEGORIES
+// ═══════════════════════════════════════════
+let dragCatSectionId = null;
+function catDragStart(e, catId){
+  dragCatSectionId = catId;
+  e.dataTransfer.effectAllowed = "move";
+  e.stopPropagation();
+  setTimeout(()=>{
+    const el = document.querySelector(`.cat-section[data-cat="${catId}"]`);
+    if(el) el.classList.add("cat-dragging");
+  }, 0);
+}
+function catDragOver(e, catId){
+  e.preventDefault(); e.stopPropagation();
+  if(catId === dragCatSectionId) return;
+  document.querySelectorAll(".cat-section").forEach(el=>el.classList.remove("cat-drag-over"));
+  const el = document.querySelector(`.cat-section[data-cat="${catId}"]`);
+  if(el) el.classList.add("cat-drag-over");
+}
+function catDragLeave(e){
+  // Only remove if leaving the section entirely
+  if(!e.currentTarget.contains(e.relatedTarget)){
+    e.currentTarget.classList.remove("cat-drag-over");
+  }
+}
+function catDragEnd(e){
+  document.querySelectorAll(".cat-section").forEach(el=>{
+    el.classList.remove("cat-dragging");
+    el.classList.remove("cat-drag-over");
+  });
+  dragCatSectionId = null;
+}
+function catDragDrop(e, targetCatId){
+  e.preventDefault(); e.stopPropagation();
+  document.querySelectorAll(".cat-section").forEach(el=>el.classList.remove("cat-drag-over"));
+  if(!dragCatSectionId || dragCatSectionId === targetCatId) return;
+  const fromIdx = CATS.findIndex(c=>c.id===dragCatSectionId);
+  const toIdx   = CATS.findIndex(c=>c.id===targetCatId);
+  if(fromIdx<0 || toIdx<0) return;
+  const [moved] = CATS.splice(fromIdx, 1);
+  CATS.splice(toIdx, 0, moved);
+  saveToLocal(); render();
 }
 
 // ═══════════════════════════════════════════
