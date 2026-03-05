@@ -4,6 +4,9 @@
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
   <title>BBHM | Operations Hub</title>
+  <!-- Firebase -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
   <link href="https://fonts.googleapis.com/css2?family=Libre+Baskerville:wght@400;700&family=Source+Sans+3:wght@300;400;600;700&display=swap" rel="stylesheet"/>
   <style>
     *{margin:0;padding:0;box-sizing:border-box;}
@@ -25,6 +28,12 @@
     /* EDIT BANNER */
     .edit-banner{padding:8px 24px;text-align:center;font-size:11px;font-weight:700;color:#fff;letter-spacing:1px;display:none;background:linear-gradient(90deg,#1A7A4A,#2DAA6A);}
     .edit-banner.show{display:block;}
+    /* SAVE STATUS */
+    .save-status{font-size:10px;font-weight:700;letter-spacing:1px;padding:4px 10px;border-radius:20px;transition:all 0.5s;white-space:nowrap;}
+    .save-status.saving{background:rgba(255,200,50,0.15);color:#FFD700;border:1px solid rgba(255,215,0,0.3);}
+    .save-status.saved{background:rgba(74,222,128,0.12);color:#4ADE80;border:1px solid rgba(74,222,128,0.3);}
+    .save-status.error{background:rgba(255,100,100,0.15);color:#FF6B6B;border:1px solid rgba(255,100,100,0.3);}
+    .save-status.hidden{opacity:0;pointer-events:none;}
     /* SEARCH */
     .search-wrap{max-width:1200px;margin:0 auto;padding:20px 24px 0;}
     .search-box{display:flex;align-items:center;gap:12px;background:#fff;border:1.5px solid #DDE8F4;border-radius:12px;padding:10px 16px;box-shadow:0 1px 4px rgba(13,43,78,0.05);}
@@ -441,16 +450,98 @@ let catModalId = null;
 const DEFAULT_BRAND = {primary:"#0D2B4E",accent:"#2563A8",logoUrl:"",companyName:"Building Better Homes Management"};
 let brand = JSON.parse(JSON.stringify(DEFAULT_BRAND));
 
-function loadSaved(){
+// ═══════════════════════════════════════════
+// FIREBASE SETUP — loads async, falls back to localStorage if blocked
+// ═══════════════════════════════════════════
+const firebaseConfig = {
+  apiKey: "AIzaSyBBgFBcq1fF2LHsWeUNOKh8lJ3wEB0T8ZU",
+  authDomain: "bbhm-sop.firebaseapp.com",
+  projectId: "bbhm-sop",
+  storageBucket: "bbhm-sop.firebasestorage.app",
+  messagingSenderId: "664920270791",
+  appId: "1:664920270791:web:93edaafdefbccc80305be2"
+};
+let db = null, DOC_SOPS = null, DOC_CATS = null, DOC_BRAND = null;
+let firebaseReady = false;
+
+function initFirebase(){
+  try{
+    if(typeof firebase === "undefined") return false;
+    if(!firebase.apps.length) firebase.initializeApp(firebaseConfig);
+    db = firebase.firestore();
+    DOC_SOPS  = db.collection("bbhm").doc("sops");
+    DOC_CATS  = db.collection("bbhm").doc("cats");
+    DOC_BRAND = db.collection("bbhm").doc("brand");
+    firebaseReady = true;
+    return true;
+  }catch(e){ console.warn("Firebase init failed:",e); return false; }
+}
+
+// Save-status helpers
+let saveTimer = null;
+function showSaveStatus(state, msg){
+  const el = document.getElementById("save-status");
+  if(!el) return;
+  el.textContent = msg;
+  el.className = "save-status " + state;
+  clearTimeout(saveTimer);
+  if(state === "saved") saveTimer = setTimeout(()=>{ el.classList.add("hidden"); }, 3000);
+}
+
+// ── LOAD ─────────────────────────────────
+function loadLocalFallback(){
   try{const s=localStorage.getItem("bbhm-sops-v5");if(s)SOPS=JSON.parse(s);}catch(e){}
   try{const c=localStorage.getItem("bbhm-cats-v1");if(c)CATS=JSON.parse(c);}catch(e){}
   try{const b=localStorage.getItem("bbhm-brand-v2");if(b)brand=Object.assign({},DEFAULT_BRAND,JSON.parse(b));}catch(e){}
 }
+async function loadFromFirebase(){
+  if(!firebaseReady) return;
+  try{
+    const [sd,cd,bd] = await Promise.all([DOC_SOPS.get(), DOC_CATS.get(), DOC_BRAND.get()]);
+    if(sd.exists && sd.data().data){ SOPS  = sd.data().data; localStorage.setItem("bbhm-sops-v5",JSON.stringify(SOPS)); }
+    if(cd.exists && cd.data().data){ CATS  = cd.data().data; localStorage.setItem("bbhm-cats-v1",JSON.stringify(CATS)); }
+    if(bd.exists && bd.data().data){ brand = Object.assign({},DEFAULT_BRAND,bd.data().data); localStorage.setItem("bbhm-brand-v2",JSON.stringify(brand)); }
+    render();
+  }catch(e){ console.warn("Firebase load failed, using local data:",e); }
+}
+function loadSaved(){
+  loadLocalFallback();  // instant — renders immediately from localStorage
+  if(initFirebase()) loadFromFirebase(); // async cloud sync
+}
+
+// ── SAVE ─────────────────────────────────
+let saveDebounce = null;
 function saveToLocal(){
   try{localStorage.setItem("bbhm-sops-v5",JSON.stringify(SOPS));}catch(e){}
   try{localStorage.setItem("bbhm-cats-v1",JSON.stringify(CATS));}catch(e){}
+  if(!firebaseReady && !initFirebase()) return; // no Firebase, localStorage only
+  clearTimeout(saveDebounce);
+  showSaveStatus("saving","⏳ Saving...");
+  saveDebounce = setTimeout(async ()=>{
+    try{
+      await Promise.all([ DOC_SOPS.set({data:SOPS}), DOC_CATS.set({data:CATS}) ]);
+      showSaveStatus("saved","✅ Saved");
+    }catch(e){
+      showSaveStatus("error","❌ Save failed");
+      console.error("Firebase save error:",e);
+    }
+  }, 800);
 }
-function saveBrandLocal(){try{localStorage.setItem("bbhm-brand-v2",JSON.stringify(brand));}catch(e){}}
+function saveBrandLocal(){
+  try{localStorage.setItem("bbhm-brand-v2",JSON.stringify(brand));}catch(e){}
+  if(!firebaseReady && !initFirebase()) return;
+  clearTimeout(saveDebounce);
+  showSaveStatus("saving","⏳ Saving...");
+  saveDebounce = setTimeout(async ()=>{
+    try{
+      await DOC_BRAND.set({data:brand});
+      showSaveStatus("saved","✅ Saved");
+    }catch(e){
+      showSaveStatus("error","❌ Save failed");
+      console.error("Firebase brand save error:",e);
+    }
+  }, 800);
+}
 loadSaved();
 
 function adjustColor(hex,amt){
@@ -742,6 +833,7 @@ function renderHub(){
       <img id="logo-img" class="header-logo" alt="BBHM" onclick="${editMode?'openCustomizeModal()':''}"/>
       <div><div class="header-title">${brand.companyName}</div><div class="header-sub">Operations Hub</div></div>
       <div class="header-actions">
+        <span class="save-status hidden" id="save-status"></span>
         ${editMode?`<button class="hdr-btn active" onclick="openCustomizeModal()">🎨 Branding</button>`:""}
         <button class="hdr-btn ${editMode?'active':''}" onclick="toggleEditMode()">${editMode?'🔓 Exit Edit':'🔒'}</button>
       </div>
@@ -887,6 +979,7 @@ function renderSopPage(){
         <div class="header-sub">${brand.companyName}</div>
       </div>
       <div class="header-actions">
+        <span class="save-status hidden" id="save-status"></span>
         ${editMode?`<button class="hdr-btn" onclick="openCardModal(${sop.id},'${sop.category}')">✏️ Card Info</button>`:""}
         ${editMode?`<button class="hdr-btn ${editingSop?'active':''}" onclick="${editingSop?'cancelEdit()':'startEdit()'}">
           ${editingSop?'✕ Cancel':'📋 Edit Steps'}</button>`:""}
@@ -1105,8 +1198,8 @@ function renderTrainingSteps(sop,container){
 // ═══════════════════════════════════════════
 function addTrainingItem(si,type){const sop=getSop();sop.steps[si].trainingItems=sop.steps[si].trainingItems||[];sop.steps[si].trainingItems.push({type,label:type==="note"?"New note":"New "+type,url:""});renderSteps();}
 function deleteTrainingItem(si,ii){if(!confirm("Delete?"))return;getSop().steps[si].trainingItems.splice(ii,1);renderSteps();}
-function updateTrainingItem(si,ii,field,val){getSop().steps[si].trainingItems[ii][field]=val;}
-function updateTaskText(si,ti,val){if(val.trim())getSop().steps[si].items[ti].text=val.trim();}
+function updateTrainingItem(si,ii,field,val){getSop().steps[si].trainingItems[ii][field]=val;saveToLocal();}
+function updateTaskText(si,ti,val){if(val.trim()){getSop().steps[si].items[ti].text=val.trim();saveToLocal();}}
 function updateTaskRole(si,ti,val){getSop().steps[si].items[ti].role=val;renderSteps();}
 function setTaskLink(si,ti,sopId){
   const item=getSop().steps[si].items[ti];
