@@ -70,7 +70,15 @@
     .edit-mode-active .cat-edit-btn{display:inline-block;}
     .cat-body{border-top:1px solid #EEF2F8;padding:16px 20px 20px;}
     .cat-body.collapsed{display:none;}
-    .sop-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px;}
+    .sop-grid{display:flex;flex-wrap:wrap;align-items:stretch;gap:0;}
+    /* flow arrow between cards */
+    .card-flow-arrow{display:flex;align-items:center;justify-content:center;width:32px;flex-shrink:0;align-self:center;}
+    .card-flow-arrow-inner{width:28px;height:28px;border-radius:50%;border:2px solid #DDE8F4;background:#fff;display:flex;align-items:center;justify-content:center;font-size:13px;color:#8AA0BC;flex-shrink:0;}
+    /* draggable cards in edit mode */
+    .sop-card.dragging{opacity:0.35;transform:scale(0.97);box-shadow:none;}
+    .sop-card.drag-over{border-color:#2563A8;box-shadow:0 0 0 3px rgba(37,99,168,0.18);transform:translateY(-3px);}
+    .drag-hint{font-size:9px;color:#8AA0BC;text-align:center;letter-spacing:1px;margin-top:6px;display:none;}
+    .edit-mode-active .drag-hint{display:block;}
     /* SOP CARDS */
     .sop-card{background:#fff;border-radius:14px;border:1px solid #DDE8F4;padding:20px 20px 48px;cursor:pointer;box-shadow:0 1px 4px rgba(13,43,78,0.05);transition:all 0.2s;position:relative;overflow:hidden;}
     .sop-card:hover{box-shadow:0 8px 28px rgba(13,43,78,0.12);transform:translateY(-2px);border-color:#B0C8E8;}
@@ -654,7 +662,8 @@ function renderHub(){
 
   const catSections=CATS.map(cat=>{
     const sopList=SOPS.filter(s=>s.category===cat.id);
-    const cards=sopList.map(sop=>{
+    // Build individual card HTML strings
+    const cardItems=sopList.map(sop=>{
       const rc=RC[sop.owner]||{bg:"#EEF2F8",border:"#C5D4E8",text:"#4A6080"};
       const hasSteps=sop.steps&&sop.steps.length>0;
       const isComingSoon=!hasSteps&&!sop.isTraining;
@@ -662,30 +671,49 @@ function renderHub(){
       const matchesRole=activeRoleFilter==="All"||sopRoles.includes(activeRoleFilter)||sop.owner===activeRoleFilter||(sop.steps&&sop.steps.length===0);
       const matchesSearch=searchQuery===""||sop.title.toLowerCase().includes(searchQuery)||sop.desc.toLowerCase().includes(searchQuery);
       const hidden=!matchesRole||!matchesSearch;
-      return`<div class="sop-card ${isComingSoon?'coming-soon':''} ${hidden?'hidden':''} ${editMode?'edit-mode-active':''}"
-        onclick="${!editMode&&!isComingSoon?'openSop('+sop.id+')':''}">
-        <div class="sop-card-stripe" style="background:${cat.color};"></div>
-        <div class="sop-card-num">
-          ${sop.isTraining?'<span style="font-size:9px;background:#EAF1FB;color:#2563A8;border:1px solid #2563A8;border-radius:7px;padding:1px 7px;font-weight:700;">TRAINING</span>':""}
-          ${isComingSoon?'<span class="coming-pill">Coming Soon</span>':""}
-        </div>
-        <div class="sop-card-title">${sop.title}</div>
-        <div class="sop-card-desc">${sop.desc}</div>
-        <div class="sop-card-meta">
-          <span class="sop-card-owner" style="background:${rc.bg};color:${rc.text};border:1px solid ${rc.border};">${sop.owner}</span>
-          <span class="sop-card-steps">${sop.isTraining?sop.steps.length+" sections":hasSteps?sop.steps.length+" steps":"—"}</span>
-        </div>
-        ${!editMode&&!isComingSoon?`<span class="sop-card-arrow" style="color:${brand.accent};">→</span>`:""}
-        <div class="card-edit-actions">
-          <button class="card-btn-edit" onclick="event.stopPropagation();openCardModal(${sop.id},'${cat.id}')">✏️ Card</button>
-          <button class="card-btn-open" onclick="event.stopPropagation();openSopEdit(${sop.id})">📋 Steps</button>
-          <button class="card-btn-delete" onclick="event.stopPropagation();quickDeleteSop(${sop.id})">🗑</button>
-        </div>
-      </div>`;
-    }).join("");
-    const addCard=editMode?`<div class="add-sop-card" style="display:flex;" onclick="openCardModal(null,'${cat.id}')"><span class="add-sop-icon">➕</span><span>Add SOP to ${cat.label}</span></div>`:"";
+      const dragAttrs=editMode?`draggable="true" ondragstart="dragStart(event,${sop.id},'${cat.id}')" ondragover="dragOver(event)" ondragleave="dragLeave(event)" ondrop="dragDrop(event,${sop.id},'${cat.id}')" ondragend="dragEnd(event)"`:"";
+      return{id:sop.id,hidden,html:`
+        <div class="sop-card ${isComingSoon?'coming-soon':''} ${hidden?'hidden':''} ${editMode?'edit-mode-active':''}"
+          style="width:280px;flex-shrink:0;margin:7px;"
+          data-sop-id="${sop.id}" data-cat-id="${cat.id}"
+          ${dragAttrs}
+          onclick="${!editMode&&!isComingSoon?'openSop('+sop.id+')':''}">
+          <div class="sop-card-stripe" style="background:${cat.color};"></div>
+          <div class="sop-card-num">
+            ${sop.isTraining?'<span style="font-size:9px;background:#EAF1FB;color:#2563A8;border:1px solid #2563A8;border-radius:7px;padding:1px 7px;font-weight:700;">TRAINING</span>':""}
+            ${isComingSoon?'<span class="coming-pill">Coming Soon</span>':""}
+          </div>
+          <div class="sop-card-title">${sop.title}</div>
+          <div class="sop-card-desc">${sop.desc}</div>
+          <div class="sop-card-meta">
+            <span class="sop-card-owner" style="background:${rc.bg};color:${rc.text};border:1px solid ${rc.border};">${sop.owner}</span>
+            <span class="sop-card-steps">${sop.isTraining?sop.steps.length+" sections":hasSteps?sop.steps.length+" steps":"—"}</span>
+          </div>
+          ${!editMode&&!isComingSoon?`<span class="sop-card-arrow" style="color:${brand.accent};">→</span>`:""}
+          ${editMode?`<div class="drag-hint">☰ drag to reorder</div>`:""}
+          <div class="card-edit-actions">
+            <button class="card-btn-edit" onclick="event.stopPropagation();openCardModal(${sop.id},'${cat.id}')">✏️ Card</button>
+            <button class="card-btn-open" onclick="event.stopPropagation();openSopEdit(${sop.id})">📋 Steps</button>
+            <button class="card-btn-delete" onclick="event.stopPropagation();quickDeleteSop(${sop.id})">🗑</button>
+          </div>
+        </div>`};
+    });
+    // Weave flow arrows between visible cards
+    const visibleItems=cardItems.filter(c=>!c.hidden);
+    let cardsHtml="";
+    cardItems.forEach((item,idx)=>{
+      cardsHtml+=item.html;
+      // Insert arrow after this card if: not hidden, and there's a next non-hidden card
+      if(!item.hidden){
+        const nextVisible=cardItems.slice(idx+1).find(c=>!c.hidden);
+        if(nextVisible){
+          cardsHtml+=`<div class="card-flow-arrow"><div class="card-flow-arrow-inner" style="border-color:${cat.color};color:${cat.color};">→</div></div>`;
+        }
+      }
+    });
+    const addCard=editMode?`<div class="card-flow-arrow" style="align-self:center;"><div class="card-flow-arrow-inner" style="border-color:#C5D4E8;color:#C5D4E8;">→</div></div><div class="add-sop-card" style="display:flex;width:240px;flex-shrink:0;margin:7px;" onclick="openCardModal(null,'${cat.id}')"><span class="add-sop-icon">➕</span><span>Add SOP</span></div>`:"";
     const editCatBtn=editMode?`<button class="cat-edit-btn" onclick="event.stopPropagation();openCatModal('${cat.id}')">✏️ Edit</button>`:"";
-    const isOpen = !catCollapsed[cat.id];
+    const isOpen=!catCollapsed[cat.id];
     return`<div class="cat-section" data-cat="${cat.id}">
       <div class="cat-header" onclick="toggleCat('${cat.id}')">
         <div class="cat-icon" style="background:${cat.color}20;color:${cat.color};">${cat.icon}</div>
@@ -695,7 +723,7 @@ function renderHub(){
         <span class="cat-chevron ${isOpen?'open':''}" id="cat-chev-${cat.id}">▼</span>
       </div>
       <div class="cat-body ${isOpen?'':'collapsed'}" id="cat-body-${cat.id}">
-        <div class="sop-grid">${cards}${addCard}</div>
+        <div class="sop-grid">${cardsHtml}${addCard}</div>
       </div>
     </div>`;
   }).join("");
@@ -741,6 +769,50 @@ function renderHub(){
     ${catSections}
     ${editMode?`<div style="padding:0 0 4px;"><button style="display:block;width:100%;background:transparent;border:2px dashed #C5D4E8;border-radius:14px;padding:14px;text-align:center;cursor:pointer;color:#8AA0BC;font-size:13px;font-weight:700;transition:all 0.2s;" onmouseover="this.style.borderColor='#7B3FC7';this.style.color='#7B3FC7';this.style.background='#F5F0FF'" onmouseout="this.style.borderColor='#C5D4E8';this.style.color='#8AA0BC';this.style.background='transparent'" onclick="openCatModal(null)">➕ Add New Category</button></div>`:""}
   </div>`;
+}
+
+// ═══════════════════════════════════════════
+// DRAG & DROP — reorder SOP cards within a category
+// ═══════════════════════════════════════════
+let dragSopId=null, dragCatId=null;
+function dragStart(e,sopId,catId){
+  dragSopId=sopId; dragCatId=catId;
+  e.dataTransfer.effectAllowed="move";
+  setTimeout(()=>e.target.closest(".sop-card").classList.add("dragging"),0);
+}
+function dragOver(e){
+  e.preventDefault(); e.dataTransfer.dropEffect="move";
+  const card=e.target.closest(".sop-card");
+  if(card&&card.dataset.sopId!=dragSopId) card.classList.add("drag-over");
+}
+function dragLeave(e){
+  const card=e.target.closest(".sop-card");
+  if(card) card.classList.remove("drag-over");
+}
+function dragEnd(e){
+  document.querySelectorAll(".sop-card").forEach(c=>{c.classList.remove("dragging");c.classList.remove("drag-over");});
+  dragSopId=null; dragCatId=null;
+}
+function dragDrop(e,targetSopId,targetCatId){
+  e.preventDefault();
+  const card=e.target.closest(".sop-card");
+  if(card) card.classList.remove("drag-over");
+  if(dragSopId===null||dragSopId===targetSopId) return;
+  // Reorder SOPS array: move dragSopId to position of targetSopId within same category
+  const catSops=SOPS.filter(s=>s.category===dragCatId);
+  const otherSops=SOPS.filter(s=>s.category!==dragCatId);
+  const dragIdx=catSops.findIndex(s=>s.id===dragSopId);
+  const targetIdx=catSops.findIndex(s=>s.id===targetSopId);
+  if(dragIdx<0||targetIdx<0) return;
+  const [moved]=catSops.splice(dragIdx,1);
+  catSops.splice(targetIdx,0,moved);
+  // Rebuild SOPS preserving overall order of other categories
+  SOPS=[];
+  CATS.forEach(cat=>{
+    if(cat.id===dragCatId) SOPS.push(...catSops);
+    else SOPS.push(...otherSops.filter(s=>s.category===cat.id));
+  });
+  saveToLocal(); render();
 }
 
 function quickDeleteSop(id){
