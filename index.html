@@ -159,6 +159,13 @@
     .task-text{flex:1;font-size:13px;color:#2A3F5F;line-height:1.55;}
     .task-text-input{flex:1;font-size:13px;color:#0D2B4E;border:1.5px solid #2563A8;border-radius:6px;padding:4px 8px;outline:none;font-family:"Source Sans 3",sans-serif;background:#EAF1FB;}
     .task-badge{font-size:9px;font-weight:700;border-radius:4px;padding:2px 8px;white-space:nowrap;flex-shrink:0;margin-top:2px;}
+    /* SOP link chip — shown beneath a task */
+    .task-sop-link{display:inline-flex;align-items:center;gap:5px;margin-top:5px;padding:4px 10px;background:#EAF1FB;border:1px solid #B8D4F0;border-radius:20px;font-size:11px;font-weight:700;color:#1A3A6E;cursor:pointer;transition:all 0.15s;text-decoration:none;max-width:100%;}
+    .task-sop-link:hover{background:#D0E4F8;border-color:#2563A8;color:#0D2B4E;transform:translateX(2px);}
+    .task-sop-link-icon{font-size:12px;flex-shrink:0;}
+    .task-sop-link-remove{background:none;border:none;color:#8AA0BC;font-size:13px;cursor:pointer;padding:0 2px;margin-left:3px;flex-shrink:0;}
+    .task-sop-link-remove:hover{color:#C0392B;}
+    .task-link-select{font-size:11px;border:1.5px solid #C5D4E8;border-radius:7px;padding:4px 7px;outline:none;font-family:"Source Sans 3",sans-serif;background:#fff;color:#0D2B4E;margin-top:4px;max-width:100%;}
     .task-role-select{font-size:10px;font-weight:700;border-radius:4px;padding:2px 5px;border:1.5px solid #2563A8;outline:none;font-family:"Source Sans 3",sans-serif;cursor:pointer;flex-shrink:0;}
     .task-delete{background:none;border:none;color:#EEA0A0;font-size:15px;cursor:pointer;padding:0 3px;flex-shrink:0;}
     /* TRAINING */
@@ -930,16 +937,44 @@ function renderSteps(){
       if(!vis&&!editingSop)return"";
       if(editingSop){
         const opts=ROLES.map(r=>`<option value="${r}"${r===it.role?'selected':''}>${r}</option>`).join("");
+        // Build SOP link picker — all SOPs except current
+        const sopOpts=`<option value="">— Link to another SOP —</option>`
+          +SOPS.filter(s=>s.id!==currentSopId).map(s=>`<option value="${s.id}"${it.link&&it.link.sopId===s.id?'selected':''}>${s.title}</option>`).join("");
+        const linkPicker=`<div style="margin-top:4px;">
+          <select class="task-link-select" onchange="setTaskLink(${si},${ti},this.value)">
+            ${sopOpts}
+          </select>
+          ${it.link?`<div style="font-size:10px;color:#2563A8;margin-top:2px;">🔗 Linked: ${(SOPS.find(s=>s.id===it.link.sopId)||{title:'?'}).title} <button class="task-sop-link-remove" onclick="removeTaskLink(${si},${ti})">✕ remove</button></div>`:''}
+        </div>`;
         return`<div class="task-row" style="${!vis?'opacity:0.4':''}">
           <div class="task-dot" style="background:${rc.dot};"></div>
-          <input class="task-text-input" value="${it.text.replace(/"/g,'&quot;')}" onchange="updateTaskText(${si},${ti},this.value)"/>
-          <select class="task-role-select" style="background:${rc.bg};color:${rc.text};border-color:${rc.border};" onchange="updateTaskRole(${si},${ti},this.value)">${opts}</select>
-          <button class="task-delete" onclick="deleteTask(${si},${ti})">✕</button>
+          <div style="flex:1;min-width:0;">
+            <div style="display:flex;gap:8px;align-items:center;">
+              <input class="task-text-input" style="flex:1;" value="${it.text.replace(/"/g,'&quot;')}" onchange="updateTaskText(${si},${ti},this.value)"/>
+              <select class="task-role-select" style="background:${rc.bg};color:${rc.text};border-color:${rc.border};" onchange="updateTaskRole(${si},${ti},this.value)">${opts}</select>
+              <button class="task-delete" onclick="deleteTask(${si},${ti})">✕</button>
+            </div>
+            ${linkPicker}
+          </div>
         </div>`;
       }
-      return`<div class="task-row"><div class="task-dot" style="background:${rc.dot};"></div>
-        <span class="task-text">${it.text}</span>
-        ${activeRole==="All"?`<span class="task-badge" style="background:${rc.bg};color:${rc.text};border:1px solid ${rc.border};">${it.role}</span>`:""}
+      // View mode — show link chip if present
+      const linkedSop = it.link ? SOPS.find(s=>s.id===it.link.sopId) : null;
+      const linkChip = linkedSop
+        ? `<div><span class="task-sop-link" onclick="openSop(${linkedSop.id})">
+            <span class="task-sop-link-icon">📋</span>
+            <span>See SOP: ${linkedSop.title}</span>
+            <span style="font-size:10px;opacity:0.6;">→</span>
+          </span></div>`
+        : '';
+      return`<div class="task-row"><div class="task-dot" style="background:${rc.dot};margin-top:${linkedSop?'9':'7'}px;"></div>
+        <div style="flex:1;min-width:0;">
+          <div style="display:flex;align-items:flex-start;gap:8px;">
+            <span class="task-text">${it.text}</span>
+            ${activeRole==="All"?`<span class="task-badge" style="background:${rc.bg};color:${rc.text};border:1px solid ${rc.border};flex-shrink:0;">${it.role}</span>`:""}
+          </div>
+          ${linkChip}
+        </div>
       </div>`;
     }).join("");
     const addBar=editingSop?`<div class="step-edit-bar">
@@ -1073,6 +1108,13 @@ function deleteTrainingItem(si,ii){if(!confirm("Delete?"))return;getSop().steps[
 function updateTrainingItem(si,ii,field,val){getSop().steps[si].trainingItems[ii][field]=val;}
 function updateTaskText(si,ti,val){if(val.trim())getSop().steps[si].items[ti].text=val.trim();}
 function updateTaskRole(si,ti,val){getSop().steps[si].items[ti].role=val;renderSteps();}
+function setTaskLink(si,ti,sopId){
+  const item=getSop().steps[si].items[ti];
+  if(!sopId){delete item.link;}
+  else{const linked=SOPS.find(s=>s.id==sopId);if(linked)item.link={sopId:linked.id};}
+  renderSteps();
+}
+function removeTaskLink(si,ti){delete getSop().steps[si].items[ti].link;renderSteps();}
 function addTask(si){const inp=document.getElementById("nt-"+si);const rol=document.getElementById("nr-"+si);if(!inp.value.trim())return;getSop().steps[si].items=getSop().steps[si].items||[];getSop().steps[si].items.push({text:inp.value.trim(),role:rol.value});inp.value="";renderSteps();}
 function deleteTask(si,ti){if(!confirm("Delete task?"))return;getSop().steps[si].items.splice(ti,1);renderSteps();}
 function toggleStep(idx){expanded[idx]=expanded[idx]===false?true:false;renderSteps();}
