@@ -463,6 +463,16 @@ const firebaseConfig = {
 };
 let db = null, DOC_SOPS = null, DOC_CATS = null, DOC_BRAND = null;
 let firebaseReady = false;
+// Domains allowed to write to Firebase — add your custom domain here when ready
+const ALLOWED_WRITE_DOMAINS = [
+  "bbhm-sop.vercel.app",
+  "localhost",
+  "127.0.0.1"
+];
+function canWrite(){
+  const host = window.location.hostname;
+  return ALLOWED_WRITE_DOMAINS.some(d => host === d || host.endsWith("."+d));
+}
 
 function initFirebase(){
   try{
@@ -514,7 +524,8 @@ let saveDebounce = null;
 function saveToLocal(){
   try{localStorage.setItem("bbhm-sops-v5",JSON.stringify(SOPS));}catch(e){}
   try{localStorage.setItem("bbhm-cats-v1",JSON.stringify(CATS));}catch(e){}
-  if(!firebaseReady && !initFirebase()) return; // no Firebase, localStorage only
+  if(!canWrite()) return; // domain not whitelisted — localStorage only
+  if(!firebaseReady && !initFirebase()) return;
   clearTimeout(saveDebounce);
   showSaveStatus("saving","⏳ Saving...");
   saveDebounce = setTimeout(async ()=>{
@@ -529,6 +540,7 @@ function saveToLocal(){
 }
 function saveBrandLocal(){
   try{localStorage.setItem("bbhm-brand-v2",JSON.stringify(brand));}catch(e){}
+  if(!canWrite()) return; // domain not whitelisted — localStorage only
   if(!firebaseReady && !initFirebase()) return;
   clearTimeout(saveDebounce);
   showSaveStatus("saving","⏳ Saving...");
