@@ -311,11 +311,6 @@
     </select>
     <label class="modal-label">Category</label>
     <select class="modal-select" id="ce-category" style="margin-top:6px;">
-      <option value="sales">🤝 Sales System</option>
-      <option value="preconstruction">📐 Pre-Construction System</option>
-      <option value="production">🏗️ Production System</option>
-      <option value="financial">💰 Financial System</option>
-      <option value="operations">👥 Operations / People System</option>
     </select>
     <label class="modal-label">Trigger (what kicks this off)</label>
     <input class="modal-input" id="ce-trigger" placeholder="e.g. New lead enters the business" style="margin-top:6px;"/>
@@ -470,15 +465,10 @@ const firebaseConfig = {
 let db = null, DOC_SOPS = null, DOC_CATS = null, DOC_BRAND = null;
 let firebaseReady = false;
 // Domains allowed to write to Firebase — add your custom domain here when ready
-const ALLOWED_WRITE_DOMAINS = [
-  "bbhm-sop.vercel.app",
-  "localhost",
-  "127.0.0.1"
-];
-function canWrite(){
-  const host = window.location.hostname;
-  return ALLOWED_WRITE_DOMAINS.some(d => host === d || host.endsWith("."+d));
-}
+// Strip undefined/null values deep — Firestore rejects undefined fields
+function sanitize(obj){ return JSON.parse(JSON.stringify(obj, (k,v)=>v===undefined?null:v)); }
+
+function canWrite(){ return true; } // Domain restricted via Firebase API key settings instead
 
 function initFirebase(){
   try{
@@ -536,7 +526,7 @@ function saveToLocal(){
   showSaveStatus("saving","⏳ Saving...");
   saveDebounce = setTimeout(async ()=>{
     try{
-      await Promise.all([ DOC_SOPS.set({data:SOPS}), DOC_CATS.set({data:CATS}) ]);
+      await Promise.all([ DOC_SOPS.set({data:sanitize(SOPS)}), DOC_CATS.set({data:sanitize(CATS)}) ]);
       showSaveStatus("saved","✅ Saved");
     }catch(e){
       showSaveStatus("error","❌ Save failed");
@@ -552,7 +542,7 @@ function saveBrandLocal(){
   showSaveStatus("saving","⏳ Saving...");
   saveDebounce = setTimeout(async ()=>{
     try{
-      await DOC_BRAND.set({data:brand});
+      await DOC_BRAND.set({data:sanitize(brand)});
       showSaveStatus("saved","✅ Saved");
     }catch(e){
       showSaveStatus("error","❌ Save failed");
@@ -632,19 +622,22 @@ function saveCustomize(){
 // SOP CARD MODAL — Add / Edit card details
 // ═══════════════════════════════════════════
 function openCardModal(sopId, catId){
-  cardModalSopId = sopId;  // null = new
+  cardModalSopId = sopId;
   cardModalCatId = catId;
   const isNew = sopId===null;
   const sop = isNew ? null : SOPS.find(s=>s.id===sopId);
   document.getElementById("card-modal-title").textContent = isNew ? "➕ New SOP Card" : "✏️ Edit SOP Card";
   document.getElementById("card-modal-sub").textContent = isNew ? "Fill in the details for the new SOP card." : "Edit the card details. Open the SOP to build its steps.";
-  document.getElementById("ce-title").value   = sop ? sop.title   : "";
-  document.getElementById("ce-desc").value    = sop ? sop.desc    : "";
-  document.getElementById("ce-trigger").value = sop ? sop.trigger : "";
-  document.getElementById("ce-endlabel").value= sop ? (sop.endLabel||"") : "";
-  document.getElementById("ce-owner").value   = sop ? sop.owner   : "PM";
-  document.getElementById("ce-category").value= sop ? sop.category: (catId||"sales");
-  document.getElementById("ce-type").value    = sop&&sop.isTraining ? "training" : "standard";
+  document.getElementById("ce-title").value    = sop ? sop.title    : "";
+  document.getElementById("ce-desc").value     = sop ? sop.desc     : "";
+  document.getElementById("ce-trigger").value  = sop ? sop.trigger  : "";
+  document.getElementById("ce-endlabel").value = sop ? (sop.endLabel||"") : "";
+  document.getElementById("ce-owner").value    = sop ? sop.owner    : "PM";
+  document.getElementById("ce-type").value     = sop&&sop.isTraining ? "training" : "standard";
+  // Populate category dropdown from live CATS array so new categories always appear
+  const catSel = document.getElementById("ce-category");
+  const currentCat = sop ? sop.category : (catId || (CATS[0]&&CATS[0].id) || "");
+  catSel.innerHTML = CATS.map(c=>`<option value="${c.id}" ${c.id===currentCat?'selected':''}>${c.icon} ${c.label}</option>`).join("");
   document.getElementById("card-delete-btn").style.display = isNew ? "none" : "";
   document.getElementById("card-save-btn").style.background = brand.primary;
   document.getElementById("card-edit-modal").classList.add("show");
@@ -653,30 +646,31 @@ function closeCardModal(){document.getElementById("card-edit-modal").classList.r
 function saveCardEdit(){
   const title = document.getElementById("ce-title").value.trim();
   if(!title){alert("Please enter a title.");return;}
-  const desc     = document.getElementById("ce-desc").value.trim();
-  const owner    = document.getElementById("ce-owner").value;
-  const category = document.getElementById("ce-category").value;
-  const trigger  = document.getElementById("ce-trigger").value.trim();
-  const endLabel = document.getElementById("ce-endlabel").value.trim();
+  const desc       = document.getElementById("ce-desc").value.trim();
+  const owner      = document.getElementById("ce-owner").value;
+  const category   = document.getElementById("ce-category").value;
+  const trigger    = document.getElementById("ce-trigger").value.trim();
+  const endLabel   = document.getElementById("ce-endlabel").value.trim();
   const isTraining = document.getElementById("ce-type").value==="training";
   if(cardModalSopId===null){
-    // NEW SOP
-    SOPS.push({id:nextId(),title,category,desc,owner,trigger,endLabel,isTraining:isTraining||undefined,steps:[]});
+    // NEW SOP — never include undefined fields (Firestore rejects them)
+    const newSop = {id:nextId(),title,category,desc,owner,trigger,endLabel,steps:[]};
+    if(isTraining) newSop.isTraining = true;
+    SOPS.push(newSop);
   } else {
-    // EDIT EXISTING
     const sop = SOPS.find(s=>s.id===cardModalSopId);
     if(sop){
-      sop.title=title;sop.desc=desc;sop.owner=owner;sop.category=category;
-      sop.trigger=trigger;sop.endLabel=endLabel;
+      sop.title=title; sop.desc=desc; sop.owner=owner; sop.category=category;
+      sop.trigger=trigger; sop.endLabel=endLabel;
       if(isTraining) sop.isTraining=true; else delete sop.isTraining;
     }
   }
-  saveToLocal();closeCardModal();render();
+  saveToLocal(); closeCardModal(); render();
 }
 function deleteSopCard(){
   if(!confirm("Delete this SOP card? This cannot be undone."))return;
   SOPS=SOPS.filter(s=>s.id!==cardModalSopId);
-  saveToLocal();closeCardModal();render();
+  saveToLocal(); closeCardModal(); render();
 }
 
 // ═══════════════════════════════════════════
