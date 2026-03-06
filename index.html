@@ -349,6 +349,24 @@
   </div>
 </div>
 
+<!-- Workflow Editor Modal -->
+<div class="modal-overlay" id="workflow-edit-modal">
+  <div class="modal-box" style="max-width:540px;">
+    <h3>🔄 Edit Project Workflow</h3>
+    <p style="font-size:12px;color:#8AA0BC;margin-bottom:14px;">Add, remove, rename, and reorder workflow stages. Each stage can link to any SOP.</p>
+    <div id="wf-editor-list" style="display:flex;flex-direction:column;gap:8px;max-height:340px;overflow-y:auto;padding-right:4px;margin-bottom:14px;"></div>
+    <div style="display:flex;gap:8px;margin-bottom:16px;">
+      <input class="modal-input" id="wf-new-label" placeholder="New stage label..." style="flex:1;"/>
+      <select class="modal-select" id="wf-new-sop" style="flex:1;"></select>
+      <button class="modal-confirm" id="wf-add-btn" onclick="wfAddStep()" style="flex-shrink:0;padding:8px 14px;">+ Add</button>
+    </div>
+    <div class="modal-btns">
+      <button class="modal-cancel-btn" onclick="closeWfModal()">Cancel</button>
+      <button class="modal-confirm" id="wf-save-btn" onclick="saveWfEdit()">Save Workflow</button>
+    </div>
+  </div>
+</div>
+
 <script>
 // ═══════════════════════════════════════════
 // CONSTANTS
@@ -365,17 +383,18 @@ const RC = {
 const PRIMARY_SWATCHES = ["#0D2B4E","#1A3A6E","#1A1A2E","#2C3E50","#4A235A","#1A4A2E","#7B3000","#8B0000"];
 const ACCENT_SWATCHES  = ["#2563A8","#4A90D9","#7B3FC7","#0D6EAA","#1A7A4A","#C07A10","#C0392B","#16A085"];
 const CAT_COLORS = ["#0D6EAA","#C07A10","#2563A8","#1A7A4A","#7B3FC7","#C0392B","#16A085","#8E44AD","#D35400","#0D2B4E"];
-const WORKFLOW_STEPS = [
-  {label:"Lead Intake",    sopTitle:"Lead Intake & Qualification"},
-  {label:"Estimate",       sopTitle:"Estimating & Proposal Creation"},
+let WORKFLOW_STEPS = [
+  {label:"Lead Intake",     sopTitle:"Lead Intake & Qualification"},
+  {label:"Estimate",        sopTitle:"Estimating & Proposal Creation"},
   {label:"Sales & Contract",sopTitle:"Proposal Review"},
-  {label:"Project Kickoff",sopTitle:"Project Kickoff (Pre-Construction)"},
-  {label:"Sub Bidding",    sopTitle:"Subcontractor Bidding"},
-  {label:"Materials",      sopTitle:"Material Procurement"},
-  {label:"Execution",      sopTitle:"Project Execution"},
-  {label:"Quality Control",sopTitle:"Quality Control Inspections"},
-  {label:"Closeout",       sopTitle:"Project Closeout"},
+  {label:"Project Kickoff", sopTitle:"Project Kickoff (Pre-Construction)"},
+  {label:"Sub Bidding",     sopTitle:"Subcontractor Bidding"},
+  {label:"Materials",       sopTitle:"Material Procurement"},
+  {label:"Execution",       sopTitle:"Project Execution"},
+  {label:"Quality Control", sopTitle:"Quality Control Inspections"},
+  {label:"Closeout",        sopTitle:"Project Closeout"},
 ];
+const DEFAULT_WORKFLOW = JSON.parse(JSON.stringify(WORKFLOW_STEPS));
 
 // ═══════════════════════════════════════════
 // DEFAULT DATA
@@ -464,7 +483,7 @@ const firebaseConfig = {
   messagingSenderId: "664920270791",
   appId: "1:664920270791:web:93edaafdefbccc80305be2"
 };
-let db = null, DOC_SOPS = null, DOC_CATS = null, DOC_BRAND = null;
+let db = null, DOC_SOPS = null, DOC_CATS = null, DOC_BRAND = null, DOC_WORKFLOW = null;
 let firebaseReady = false;
 // Domains allowed to write to Firebase — add your custom domain here when ready
 // Strip undefined/null values deep — Firestore rejects undefined fields
@@ -477,9 +496,10 @@ function initFirebase(){
     if(typeof firebase === "undefined") return false;
     if(!firebase.apps.length) firebase.initializeApp(firebaseConfig);
     db = firebase.firestore();
-    DOC_SOPS  = db.collection("bbhm").doc("sops");
-    DOC_CATS  = db.collection("bbhm").doc("cats");
-    DOC_BRAND = db.collection("bbhm").doc("brand");
+    DOC_SOPS     = db.collection("bbhm").doc("sops");
+    DOC_CATS     = db.collection("bbhm").doc("cats");
+    DOC_BRAND    = db.collection("bbhm").doc("brand");
+    DOC_WORKFLOW = db.collection("bbhm").doc("workflow");
     firebaseReady = true;
     return true;
   }catch(e){ console.warn("Firebase init failed:",e); return false; }
@@ -501,14 +521,16 @@ function loadLocalFallback(){
   try{const s=localStorage.getItem("bbhm-sops-v5");if(s)SOPS=JSON.parse(s);}catch(e){}
   try{const c=localStorage.getItem("bbhm-cats-v1");if(c)CATS=JSON.parse(c);}catch(e){}
   try{const b=localStorage.getItem("bbhm-brand-v2");if(b)brand=Object.assign({},DEFAULT_BRAND,JSON.parse(b));}catch(e){}
+  try{const w=localStorage.getItem("bbhm-workflow-v1");if(w)WORKFLOW_STEPS=JSON.parse(w);}catch(e){}
 }
 async function loadFromFirebase(){
   if(!firebaseReady) return;
   try{
-    const [sd,cd,bd] = await Promise.all([DOC_SOPS.get(), DOC_CATS.get(), DOC_BRAND.get()]);
-    if(sd.exists && sd.data().data){ SOPS  = sd.data().data; localStorage.setItem("bbhm-sops-v5",JSON.stringify(SOPS)); }
-    if(cd.exists && cd.data().data){ CATS  = cd.data().data; localStorage.setItem("bbhm-cats-v1",JSON.stringify(CATS)); }
-    if(bd.exists && bd.data().data){ brand = Object.assign({},DEFAULT_BRAND,bd.data().data); localStorage.setItem("bbhm-brand-v2",JSON.stringify(brand)); }
+    const [sd,cd,bd,wd] = await Promise.all([DOC_SOPS.get(), DOC_CATS.get(), DOC_BRAND.get(), DOC_WORKFLOW.get()]);
+    if(sd.exists && sd.data().data){ SOPS           = sd.data().data; localStorage.setItem("bbhm-sops-v5",JSON.stringify(SOPS)); }
+    if(cd.exists && cd.data().data){ CATS           = cd.data().data; localStorage.setItem("bbhm-cats-v1",JSON.stringify(CATS)); }
+    if(bd.exists && bd.data().data){ brand          = Object.assign({},DEFAULT_BRAND,bd.data().data); localStorage.setItem("bbhm-brand-v2",JSON.stringify(brand)); }
+    if(wd.exists && wd.data().data){ WORKFLOW_STEPS = wd.data().data; localStorage.setItem("bbhm-workflow-v1",JSON.stringify(WORKFLOW_STEPS)); }
     render();
   }catch(e){ console.warn("Firebase load failed, using local data:",e); }
 }
@@ -522,13 +544,18 @@ let saveDebounce = null;
 function saveToLocal(){
   try{localStorage.setItem("bbhm-sops-v5",JSON.stringify(SOPS));}catch(e){}
   try{localStorage.setItem("bbhm-cats-v1",JSON.stringify(CATS));}catch(e){}
-  if(!canWrite()) return; // domain not whitelisted — localStorage only
+  try{localStorage.setItem("bbhm-workflow-v1",JSON.stringify(WORKFLOW_STEPS));}catch(e){}
+  if(!canWrite()) return;
   if(!firebaseReady && !initFirebase()) return;
   clearTimeout(saveDebounce);
   showSaveStatus("saving","⏳ Saving...");
   saveDebounce = setTimeout(async ()=>{
     try{
-      await Promise.all([ DOC_SOPS.set({data:sanitize(SOPS)}), DOC_CATS.set({data:sanitize(CATS)}) ]);
+      await Promise.all([
+        DOC_SOPS.set({data:sanitize(SOPS)}),
+        DOC_CATS.set({data:sanitize(CATS)}),
+        DOC_WORKFLOW.set({data:sanitize(WORKFLOW_STEPS)})
+      ]);
       showSaveStatus("saved","✅ Saved");
     }catch(e){
       showSaveStatus("error","❌ Save failed");
@@ -678,6 +705,62 @@ function deleteSopCard(){
 // ═══════════════════════════════════════════
 // CATEGORY MODAL
 // ═══════════════════════════════════════════
+// ═══════════════════════════════════════════
+// WORKFLOW EDITOR
+// ═══════════════════════════════════════════
+let wfDraft = []; // working copy while modal is open
+
+function openWfModal(){
+  wfDraft = JSON.parse(JSON.stringify(WORKFLOW_STEPS));
+  document.getElementById("wf-save-btn").style.background = brand.primary;
+  document.getElementById("wf-add-btn").style.background  = brand.accent;
+  // Populate SOP picker
+  const sel = document.getElementById("wf-new-sop");
+  sel.innerHTML = `<option value="">— Link to SOP (optional) —</option>`
+    + SOPS.map(s=>`<option value="${s.title}">${s.title}</option>`).join("");
+  renderWfEditor();
+  document.getElementById("workflow-edit-modal").classList.add("show");
+}
+function closeWfModal(){ document.getElementById("workflow-edit-modal").classList.remove("show"); }
+
+function renderWfEditor(){
+  const list = document.getElementById("wf-editor-list");
+  if(!list) return;
+  list.innerHTML = wfDraft.map((wf,i)=>{
+    const sopSel = `<select style="font-size:11px;border:1px solid #C5D4E8;border-radius:6px;padding:3px 6px;flex:1;max-width:200px;" onchange="wfSetSop(${i},this.value)">
+      <option value="">— No SOP link —</option>
+      ${SOPS.map(s=>`<option value="${s.title}" ${s.title===wf.sopTitle?'selected':''}>${s.title}</option>`).join("")}
+    </select>`;
+    return`<div style="display:flex;align-items:center;gap:8px;background:#F7FAFF;border:1px solid #DDE8F4;border-radius:9px;padding:8px 10px;">
+      <span style="color:#8AA0BC;cursor:grab;font-size:14px;flex-shrink:0;">⠿</span>
+      <span style="font-size:11px;font-weight:700;color:#8AA0BC;flex-shrink:0;width:18px;">${i+1}</span>
+      <input style="font-size:12px;font-weight:700;border:1px solid #C5D4E8;border-radius:6px;padding:4px 8px;flex:1;min-width:80px;" value="${wf.label}" oninput="wfSetLabel(${i},this.value)"/>
+      ${sopSel}
+      <button style="background:none;border:none;color:#8AA0BC;cursor:pointer;font-size:11px;flex-shrink:0;" onclick="wfMoveUp(${i})" title="Move up">▲</button>
+      <button style="background:none;border:none;color:#8AA0BC;cursor:pointer;font-size:11px;flex-shrink:0;" onclick="wfMoveDown(${i})" title="Move down">▼</button>
+      <button style="background:#FEF0F0;border:1px solid #FDDCDC;color:#C0392B;border-radius:5px;font-size:10px;font-weight:700;padding:3px 7px;cursor:pointer;flex-shrink:0;" onclick="wfRemove(${i})">✕</button>
+    </div>`;
+  }).join("");
+}
+function wfSetLabel(i,val){ wfDraft[i].label = val; }
+function wfSetSop(i,val){ wfDraft[i].sopTitle = val; }
+function wfMoveUp(i){ if(i===0) return; [wfDraft[i-1],wfDraft[i]]=[wfDraft[i],wfDraft[i-1]]; renderWfEditor(); }
+function wfMoveDown(i){ if(i===wfDraft.length-1) return; [wfDraft[i],wfDraft[i+1]]=[wfDraft[i+1],wfDraft[i]]; renderWfEditor(); }
+function wfRemove(i){ wfDraft.splice(i,1); renderWfEditor(); }
+function wfAddStep(){
+  const label = document.getElementById("wf-new-label").value.trim();
+  if(!label){ alert("Please enter a stage label."); return; }
+  const sopTitle = document.getElementById("wf-new-sop").value;
+  wfDraft.push({label, sopTitle});
+  document.getElementById("wf-new-label").value = "";
+  document.getElementById("wf-new-sop").value   = "";
+  renderWfEditor();
+}
+function saveWfEdit(){
+  WORKFLOW_STEPS = JSON.parse(JSON.stringify(wfDraft));
+  saveToLocal(); closeWfModal(); render();
+}
+
 function openCatModal(catId){
   catModalId = catId; // null = new category
   const isNew = catId === null;
@@ -898,7 +981,10 @@ function renderHub(){
   </div>
   <div class="workflow-wrap">
     <div class="workflow-card">
-      <div class="workflow-title">🔄 BBHM Project Workflow — click any stage to open its SOP</div>
+      <div class="workflow-title" style="display:flex;align-items:center;gap:10px;">
+        <span style="flex:1;">🔄 BBHM Project Workflow — click any stage to open its SOP</span>
+        ${editMode?`<button class="cat-edit-btn" onclick="openWfModal()" style="font-size:11px;">✏️ Edit Workflow</button>`:""}
+      </div>
       <div class="workflow-steps">${wfNodes}</div>
     </div>
   </div>
