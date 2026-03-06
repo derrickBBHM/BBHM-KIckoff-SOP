@@ -1327,9 +1327,9 @@ function renderTrainingSteps(sop,container){
           ${item.type==="note"?`<textarea class="training-textarea" onchange="updateTrainingItem(${si},${ii},'label',this.value)">${item.label}</textarea>`:""}
         </div>`;
       }
-      if(item.type==="video")return`<div class="training-item ${tc}"><div class="training-item-label"><span class="training-type-badge">${tl}</span>${item.label}</div>${item.url?`<a class="training-link-btn" style="background:${brand.primary};" href="${item.url}" target="_blank">▶ Watch Video</a>`:`<span style="font-size:12px;color:#8AA0BC;font-style:italic;">No link yet</span>`}</div>`;
-      if(item.type==="image")return`<div class="training-item ${tc}"><div class="training-item-label"><span class="training-type-badge">${tl}</span>${item.label}</div>${item.url?`<img class="training-img" src="${item.url}" alt="${item.label}" onerror="this.style.display='none'"/>`:`<span style="font-size:12px;color:#8AA0BC;font-style:italic;">No image yet</span>`}</div>`;
-      return`<div class="training-item ${tc}"><div class="training-type-badge" style="margin-bottom:5px;">${tl}</div><div class="training-note">${item.label}</div></div>`;
+      if(item.type==="video")return`<div class="training-item ${tc}"><div class="training-item-label">${item.url?'':  `<span class="training-type-badge">${tl}</span>`}${item.label}</div>${item.url?`<a class="training-link-btn" style="background:${brand.primary};" href="${item.url}" target="_blank">▶ Watch Video</a>`:`<span style="font-size:12px;color:#8AA0BC;font-style:italic;">No link yet — add one in edit mode</span>`}</div>`;
+      if(item.type==="image")return`<div class="training-item ${tc}"><div class="training-item-label">${item.url?'':  `<span class="training-type-badge">${tl}</span>`}${item.label}</div>${item.url?`<img class="training-img" src="${item.url}" alt="${item.label}" onerror="this.style.display='none'"/>`:`<span style="font-size:12px;color:#8AA0BC;font-style:italic;">No image yet</span>`}</div>`;
+      return`<div class="training-item ${tc}"><div class="training-note">${item.label}</div></div>`;
     }).join("");
     const addBar=editingSop?`<div class="step-edit-bar">
       <div style="font-size:10px;color:#8AA0BC;font-weight:700;letter-spacing:1px;margin-bottom:7px;">ADD TO THIS SECTION:</div>
