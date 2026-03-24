@@ -194,10 +194,15 @@
     .training-link-btn{display:inline-flex;align-items:center;gap:5px;color:#fff;text-decoration:none;border-radius:7px;padding:6px 13px;font-size:12px;font-weight:700;margin-top:5px;}
     .training-img{width:100%;max-width:500px;border-radius:7px;margin-top:7px;border:1px solid #DDE8F4;display:block;}
     .training-note{font-size:13px;color:#2A3F5F;line-height:1.6;margin-top:3px;}
+    .training-note ul{list-style:none;padding:0;margin:0;}
+    .training-note ul li{display:flex;gap:7px;padding:2px 0;}
+    .training-note ul li::before{content:"•";color:#C07A10;font-weight:700;flex-shrink:0;}
+    .training-textarea-hint{font-size:10px;color:#C07A10;margin-top:3px;font-style:italic;}
+    .step-title-input{font-family:"Libre Baskerville",serif;font-size:14px;font-weight:700;color:#0D2B4E;border:1.5px solid #2563A8;border-radius:6px;padding:3px 8px;background:#EAF1FB;outline:none;width:100%;}
     .training-item-delete{position:absolute;top:9px;right:9px;background:none;border:none;color:#EEA0A0;font-size:15px;cursor:pointer;display:none;}
     .editing-sop .training-item-delete{display:block;}
     .training-input{width:100%;border:1.5px solid #2563A8;border-radius:6px;padding:6px 9px;font-size:13px;color:#0D2B4E;outline:none;font-family:"Source Sans 3",sans-serif;background:#EAF1FB;margin-top:5px;}
-    .training-textarea{width:100%;border:1.5px solid #C07A10;border-radius:6px;padding:6px 9px;font-size:13px;color:#0D2B4E;outline:none;font-family:"Source Sans 3",sans-serif;background:#FFF4E6;resize:vertical;min-height:65px;margin-top:5px;}
+    .training-textarea{width:100%;border:1.5px solid #C07A10;border-radius:6px;padding:6px 9px;font-size:13px;color:#0D2B4E;outline:none;font-family:"Source Sans 3",sans-serif;background:#FFF4E6;resize:vertical;min-height:80px;margin-top:5px;}
     /* EDIT CONTROLS */
     .step-edit-bar{display:none;padding:10px 14px 12px;border-top:1px dashed #C5D4E8;background:#F7FAFF;}
     .editing-sop .step-edit-bar{display:block;}
@@ -1252,7 +1257,13 @@ function renderSteps(){
       <div class="step-header" onclick="toggleStep(${si})">
         <div class="step-num" style="background:${brand.primary};">${si+1}</div>
         <div class="step-title-wrap">
-          <div class="step-title"><span>${step.icon}</span>${step.title}</div>
+          ${editingSop
+            ? `<div style="display:flex;gap:6px;align-items:center;">
+                 <input style="font-size:18px;width:44px;border:1.5px solid #C5D4E8;border-radius:6px;padding:2px 4px;text-align:center;outline:none;" value="${step.icon}" onclick="event.stopPropagation()" onchange="updateStepIcon(${si},this.value)" title="Change icon"/>
+                 <input class="step-title-input" style="flex:1;" value="${step.title.replace(/"/g,'&quot;')}" onclick="event.stopPropagation()" onchange="updateStepTitle(${si},this.value)"/>
+               </div>`
+            : `<div class="step-title"><span>${step.icon}</span>${step.title}</div>`
+          }
           <div class="step-roles">${activeRole==="All"?roleBadges:""}<span style="font-size:10px;color:#8AA0BC;margin-left:4px;">${(step.items||[]).length} tasks</span></div>
         </div>
         ${delBtn}
@@ -1324,12 +1335,21 @@ function renderTrainingSteps(sop,container){
           </div>
           ${item.type==="video"?`<input class="training-input" value="${(item.url||'').replace(/"/g,'&quot;')}" placeholder="YouTube or Loom URL..." onchange="updateTrainingItem(${si},${ii},'url',this.value)"/>`:""}
           ${item.type==="image"?`<input class="training-input" value="${(item.url||'').replace(/"/g,'&quot;')}" placeholder="Image URL (imgur.com)..." onchange="updateTrainingItem(${si},${ii},'url',this.value)"/>`:""}
-          ${item.type==="note"?`<textarea class="training-textarea" onchange="updateTrainingItem(${si},${ii},'label',this.value)">${item.label}</textarea>`:""}
+          ${item.type==="note"?`<textarea class="training-textarea" onchange="updateTrainingItem(${si},${ii},'label',this.value)">${item.label}</textarea><div class="training-textarea-hint">💡 Start each line with • to create a bullet point</div>`:""}
         </div>`;
       }
       if(item.type==="video")return`<div class="training-item ${tc}"><div class="training-item-label">${item.url?'':  `<span class="training-type-badge">${tl}</span>`}${item.label}</div>${item.url?`<a class="training-link-btn" style="background:${brand.primary};" href="${item.url}" target="_blank">▶ Watch Video</a>`:`<span style="font-size:12px;color:#8AA0BC;font-style:italic;">No link yet — add one in edit mode</span>`}</div>`;
       if(item.type==="image")return`<div class="training-item ${tc}"><div class="training-item-label">${item.url?'':  `<span class="training-type-badge">${tl}</span>`}${item.label}</div>${item.url?`<img class="training-img" src="${item.url}" alt="${item.label}" onerror="this.style.display='none'"/>`:`<span style="font-size:12px;color:#8AA0BC;font-style:italic;">No image yet</span>`}</div>`;
-      return`<div class="training-item ${tc}"><div class="training-note">${item.label}</div></div>`;
+      // Note view — render bullet lines or plain text
+      const noteHtml = item.label.split('\n').map(line=>{
+        const t = line.trim();
+        if(!t) return '';
+        if(t.startsWith('•') || t.startsWith('-') || t.startsWith('*'))
+          return `<li>${t.replace(/^[•\-\*]\s*/,'')}</li>`;
+        return `<span style="display:block;">${t}</span>`;
+      }).join('');
+      const hasBullets = item.label.split('\n').some(l=>{ const t=l.trim(); return t.startsWith('•')||t.startsWith('-')||t.startsWith('*'); });
+      return`<div class="training-item ${tc}"><div class="training-note">${hasBullets?`<ul>${noteHtml}</ul>`:noteHtml}</div></div>`;
     }).join("");
     const addBar=editingSop?`<div class="step-edit-bar">
       <div style="font-size:10px;color:#8AA0BC;font-weight:700;letter-spacing:1px;margin-bottom:7px;">ADD TO THIS SECTION:</div>
@@ -1344,7 +1364,11 @@ function renderTrainingSteps(sop,container){
       <div class="step-header" onclick="toggleStep(${si})">
         <div class="step-num" style="background:${brand.primary};">${si+1}</div>
         <div class="step-title-wrap">
-          <div class="step-title"><span>${step.icon}</span>${step.title}</div>
+          ${editingSop
+            ? `<input class="step-title-input" value="${step.title.replace(/"/g,'&quot;')}" onclick="event.stopPropagation()" onchange="updateStepTitle(${si},this.value)"/>
+               <input style="font-size:18px;width:44px;border:1.5px solid #C5D4E8;border-radius:6px;padding:2px 4px;text-align:center;margin-top:4px;outline:none;" value="${step.icon}" onclick="event.stopPropagation()" onchange="updateStepIcon(${si},this.value)" title="Change icon"/>`
+            : `<div class="step-title"><span>${step.icon}</span>${step.title}</div>`
+          }
           <div class="step-roles"><span style="font-size:10px;color:#8AA0BC;">${items.length} item${items.length!==1?'s':''}</span></div>
         </div>
         ${delBtn}
@@ -1371,6 +1395,8 @@ function deleteTrainingItem(si,ii){if(!confirm("Delete?"))return;getSop().steps[
 function updateTrainingItem(si,ii,field,val){getSop().steps[si].trainingItems[ii][field]=val;saveToLocal();}
 function updateTaskText(si,ti,val){if(val.trim()){getSop().steps[si].items[ti].text=val.trim();saveToLocal();}}
 function updateTaskRole(si,ti,val){getSop().steps[si].items[ti].role=val;renderSteps();}
+function updateStepTitle(si,val){if(val.trim()){getSop().steps[si].title=val.trim();saveToLocal();}}
+function updateStepIcon(si,val){if(val.trim()){getSop().steps[si].icon=val.trim();saveToLocal();}}
 function setTaskLink(si,ti,sopId){
   const item=getSop().steps[si].items[ti];
   if(!sopId){delete item.link;}
