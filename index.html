@@ -191,6 +191,12 @@
     .training-type-video .training-type-badge{background:#EAF1FB;color:#2563A8;}
     .training-type-image .training-type-badge{background:#F0EAF8;color:#7B3FC7;}
     .training-type-note .training-type-badge{background:#FFF4E6;color:#C07A10;}
+    .training-type-subheader{background:#F0F4FA;border:none;border-left:4px solid var(--sh-color,#2563A8);border-radius:0 10px 10px 0;padding:12px 16px;}
+    .training-subheader-title{font-family:"Libre Baskerville",serif;font-size:14px;font-weight:700;color:#0D2B4E;margin-bottom:6px;}
+    .training-subheader-body{font-size:13px;color:#2A3F5F;line-height:1.65;}
+    .training-subheader-body ul{list-style:none;padding:0;margin:0;}
+    .training-subheader-body ul li{display:flex;gap:7px;padding:2px 0;}
+    .training-subheader-body ul li::before{content:"›";color:#2563A8;font-weight:700;flex-shrink:0;font-size:15px;}
     .training-link-btn{display:inline-flex;align-items:center;gap:5px;color:#fff;text-decoration:none;border-radius:7px;padding:6px 13px;font-size:12px;font-weight:700;margin-top:5px;}
     .training-img{width:100%;max-width:500px;border-radius:7px;margin-top:7px;border:1px solid #DDE8F4;display:block;}
     .training-note{font-size:13px;color:#2A3F5F;line-height:1.6;margin-top:3px;}
@@ -1324,31 +1330,51 @@ function renderTrainingSteps(sop,container){
     const items=step.trainingItems||[];
     const card=document.createElement("div");card.className="step-card";
     const itemsHtml=items.map((item,ii)=>{
-      const tl=item.type==="video"?"▶ VIDEO":item.type==="image"?"🖼 IMAGE":"📝 NOTE";
+      const tl=item.type==="video"?"▶ VIDEO":item.type==="image"?"🖼 IMAGE":item.type==="subheader"?"📌 SUB-HEADER":"📝 NOTE";
       const tc="training-type-"+item.type;
       if(editingSop){
+        if(item.type==="subheader"){
+          return`<div class="training-item training-type-subheader" style="position:relative;">
+            <button class="training-item-delete" onclick="deleteTrainingItem(${si},${ii})">✕</button>
+            <div style="font-size:9px;font-weight:700;letter-spacing:1px;color:#1A5C3A;margin-bottom:6px;">📌 SUB-HEADER</div>
+            <input class="training-input" style="font-weight:700;font-size:14px;margin-bottom:6px;" value="${(item.label||'').replace(/"/g,'&quot;')}" placeholder="Sub-header title..." onchange="updateTrainingItem(${si},${ii},'label',this.value)"/>
+            <textarea class="training-textarea" style="border-color:#1A5C3A;background:#F0FAF4;" placeholder="Add notes beneath this header... (start lines with • for bullets)" onchange="updateTrainingItem(${si},${ii},'body',this.value)">${item.body||''}</textarea>
+            <div class="training-textarea-hint" style="color:#1A5C3A;">💡 Start each line with • for bullet points</div>
+          </div>`;
+        }
         return`<div class="training-item ${tc}" style="position:relative;">
           <button class="training-item-delete" onclick="deleteTrainingItem(${si},${ii})">✕</button>
           <div style="display:flex;align-items:center;gap:7px;margin-bottom:5px;">
             <span class="training-type-badge">${tl}</span>
-            ${item.type!=="note"?`<input class="training-input" style="margin-top:0;" value="${item.label.replace(/"/g,'&quot;')}" placeholder="Label" onchange="updateTrainingItem(${si},${ii},'label',this.value)"/>`:""}
+            ${item.type!=="note"?`<input class="training-input" style="margin-top:0;" value="${(item.label||'').replace(/"/g,'&quot;')}" placeholder="Label" onchange="updateTrainingItem(${si},${ii},'label',this.value)"/>` :""}
           </div>
-          ${item.type==="video"?`<input class="training-input" value="${(item.url||'').replace(/"/g,'&quot;')}" placeholder="YouTube or Loom URL..." onchange="updateTrainingItem(${si},${ii},'url',this.value)"/>`:""}
-          ${item.type==="image"?`<input class="training-input" value="${(item.url||'').replace(/"/g,'&quot;')}" placeholder="Image URL (imgur.com)..." onchange="updateTrainingItem(${si},${ii},'url',this.value)"/>`:""}
-          ${item.type==="note"?`<textarea class="training-textarea" onchange="updateTrainingItem(${si},${ii},'label',this.value)">${item.label}</textarea><div class="training-textarea-hint">💡 Start each line with • to create a bullet point</div>`:""}
+          ${item.type==="video"?`<input class="training-input" value="${(item.url||'').replace(/"/g,'&quot;')}" placeholder="YouTube or Loom URL..." onchange="updateTrainingItem(${si},${ii},'url',this.value)"/>` :""}
+          ${item.type==="image"?`<input class="training-input" value="${(item.url||'').replace(/"/g,'&quot;')}" placeholder="Image URL (imgur.com)..." onchange="updateTrainingItem(${si},${ii},'url',this.value)"/>` :""}
+          ${item.type==="note"?`<textarea class="training-textarea" onchange="updateTrainingItem(${si},${ii},'label',this.value)">${item.label||''}</textarea><div class="training-textarea-hint">💡 Start each line with • to create a bullet point</div>`:""}
+        </div>`;
+      }
+      // VIEW MODE
+      if(item.type==="subheader"){
+        const bodyText=item.body||'';
+        const bodyLines=bodyText.split('\n').map(line=>{
+          const t=line.trim();if(!t)return'';
+          if(t.startsWith('•')||t.startsWith('-')||t.startsWith('*'))return`<li>${t.replace(/^[•\-\*]\s*/,'')}</li>`;
+          return`<span style="display:block;">${t}</span>`;
+        }).join('');
+        const hasBodyBullets=bodyText.split('\n').some(l=>{const t=l.trim();return t.startsWith('•')||t.startsWith('-')||t.startsWith('*');});
+        return`<div class="training-item training-type-subheader">
+          <div class="training-subheader-title">${item.label||''}</div>
+          ${bodyText?`<div class="training-subheader-body">${hasBodyBullets?`<ul>${bodyLines}</ul>`:bodyLines}</div>`:''}
         </div>`;
       }
       if(item.type==="video")return`<div class="training-item ${tc}"><div class="training-item-label">${item.url?'':  `<span class="training-type-badge">${tl}</span>`}${item.label}</div>${item.url?`<a class="training-link-btn" style="background:${brand.primary};" href="${item.url}" target="_blank">▶ Watch Video</a>`:`<span style="font-size:12px;color:#8AA0BC;font-style:italic;">No link yet — add one in edit mode</span>`}</div>`;
       if(item.type==="image")return`<div class="training-item ${tc}"><div class="training-item-label">${item.url?'':  `<span class="training-type-badge">${tl}</span>`}${item.label}</div>${item.url?`<img class="training-img" src="${item.url}" alt="${item.label}" onerror="this.style.display='none'"/>`:`<span style="font-size:12px;color:#8AA0BC;font-style:italic;">No image yet</span>`}</div>`;
-      // Note view — render bullet lines or plain text
-      const noteHtml = item.label.split('\n').map(line=>{
-        const t = line.trim();
-        if(!t) return '';
-        if(t.startsWith('•') || t.startsWith('-') || t.startsWith('*'))
-          return `<li>${t.replace(/^[•\-\*]\s*/,'')}</li>`;
-        return `<span style="display:block;">${t}</span>`;
+      const noteHtml=item.label.split('\n').map(line=>{
+        const t=line.trim();if(!t)return'';
+        if(t.startsWith('•')||t.startsWith('-')||t.startsWith('*'))return`<li>${t.replace(/^[•\-\*]\s*/,'')}</li>`;
+        return`<span style="display:block;">${t}</span>`;
       }).join('');
-      const hasBullets = item.label.split('\n').some(l=>{ const t=l.trim(); return t.startsWith('•')||t.startsWith('-')||t.startsWith('*'); });
+      const hasBullets=item.label.split('\n').some(l=>{const t=l.trim();return t.startsWith('•')||t.startsWith('-')||t.startsWith('*');});
       return`<div class="training-item ${tc}"><div class="training-note">${hasBullets?`<ul>${noteHtml}</ul>`:noteHtml}</div></div>`;
     }).join("");
     const addBar=editingSop?`<div class="step-edit-bar">
@@ -1357,6 +1383,7 @@ function renderTrainingSteps(sop,container){
         <button class="add-btn" style="background:#2563A8;" onclick="addTrainingItem(${si},'video')">▶ Video</button>
         <button class="add-btn" style="background:#7B3FC7;" onclick="addTrainingItem(${si},'image')">🖼 Image</button>
         <button class="add-btn" style="background:#C07A10;" onclick="addTrainingItem(${si},'note')">📝 Note</button>
+        <button class="add-btn" style="background:#1A5C3A;" onclick="addTrainingItem(${si},'subheader')">📌 Sub-Header</button>
       </div>
     </div>`:"";
     const delBtn=editingSop?`<button class="step-delete-btn" onclick="deleteStep(${si})" title="Delete section">🗑</button>`:"";
@@ -1390,7 +1417,13 @@ function renderTrainingSteps(sop,container){
 // ═══════════════════════════════════════════
 // EDIT HELPERS
 // ═══════════════════════════════════════════
-function addTrainingItem(si,type){const sop=getSop();sop.steps[si].trainingItems=sop.steps[si].trainingItems||[];sop.steps[si].trainingItems.push({type,label:type==="note"?"New note":"New "+type,url:""});renderSteps();}
+function addTrainingItem(si,type){
+  const sop=getSop(); sop.steps[si].trainingItems=sop.steps[si].trainingItems||[];
+  if(type==="subheader") sop.steps[si].trainingItems.push({type,label:"New Sub-Header",body:""});
+  else if(type==="note")  sop.steps[si].trainingItems.push({type,label:"",url:""});
+  else                    sop.steps[si].trainingItems.push({type,label:"New "+type,url:""});
+  renderSteps();
+}
 function deleteTrainingItem(si,ii){if(!confirm("Delete?"))return;getSop().steps[si].trainingItems.splice(ii,1);renderSteps();}
 function updateTrainingItem(si,ii,field,val){getSop().steps[si].trainingItems[ii][field]=val;saveToLocal();}
 function updateTaskText(si,ti,val){if(val.trim()){getSop().steps[si].items[ti].text=val.trim();saveToLocal();}}
