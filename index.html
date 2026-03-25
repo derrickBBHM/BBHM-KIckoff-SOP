@@ -894,7 +894,7 @@ function renderHub(){
       const hasSteps=sop.steps&&sop.steps.length>0;
       const isComingSoon=!hasSteps&&!sop.isTraining;
       const sopRoles=sop.isTraining?["PM"]:Array.from(new Set((sop.steps||[]).flatMap(st=>(st.items||[]).map(i=>i.role))));
-      const matchesRole=activeRoleFilter==="All"||sopRoles.includes(activeRoleFilter)||sop.owner===activeRoleFilter||(sop.steps&&sop.steps.length===0);
+      const matchesRole=activeRoleFilter==="All"||sopRoles.includes(activeRoleFilter);
       const matchesSearch=searchQuery===""||sop.title.toLowerCase().includes(searchQuery)||sop.desc.toLowerCase().includes(searchQuery);
       const hidden=!matchesRole||!matchesSearch;
       const dragAttrs=editMode?`draggable="true" ondragstart="dragStart(event,${sop.id},'${cat.id}')" ondragover="dragOver(event)" ondragleave="dragLeave(event)" ondrop="dragDrop(event,${sop.id},'${cat.id}')" ondragend="dragEnd(event)"`:"";
@@ -1121,7 +1121,7 @@ function setRoleFilter(role){activeRoleFilter=role;render();}
 // ═══════════════════════════════════════════
 // SOP DETAIL PAGE
 // ═══════════════════════════════════════════
-function openSop(id){currentSopId=id;currentView="sop";activeRole="All";expanded={};editingSop=false;editedSOPS=null;window.scrollTo(0,0);render();}
+function openSop(id){currentSopId=id;currentView="sop";activeRole=activeRoleFilter!=="All"?activeRoleFilter:"All";expanded={};editingSop=false;editedSOPS=null;window.scrollTo(0,0);render();}
 function openSopEdit(id){currentSopId=id;currentView="sop";activeRole="All";expanded={};editingSop=true;editedSOPS=JSON.parse(JSON.stringify(SOPS));window.scrollTo(0,0);render();}
 function goHub(){currentView="hub";currentSopId=null;editingSop=false;editedSOPS=null;window.scrollTo(0,0);render();}
 function startEdit(){editingSop=true;editedSOPS=JSON.parse(JSON.stringify(SOPS));render();}
@@ -1134,9 +1134,10 @@ function renderSopPage(){
   const cat=CATS.find(c=>c.id===sop.category)||{color:brand.primary};
   const allRoles=isTraining?[]:Array.from(new Set((sop.steps||[]).flatMap(s=>(s.items||[]).map(i=>i.role))));
   const roleBtns=isTraining?"":["All"].concat(allRoles).map(r=>{
-    const rc=RC[r]||{};const isAll=r==="All";
+    const rc=RC[r]||{};const isActive=r===activeRole;
+    const activeStyle=isActive?(r==="All"?`background:${brand.primary};color:#fff;border-color:transparent;`:`background:${rc.badge||rc.bg};color:#fff;border-color:transparent;`):`background:#fff;color:${rc.text||'#4A6080'};border-color:${rc.border||'#C5D4E8'};`;
     return`<button class="role-btn" data-role="${r}"
-      style="${isAll?"background:"+brand.primary+";color:#fff;":"background:#fff;color:"+rc.text+";border-color:"+rc.border+";"}"
+      style="${activeStyle}"
       onclick="filterRole(this)">${r==="All"?"👥 All":r==="PM"?"🏢 PM":r==="APM"?"🏗️ APM":r==="Sales"?"🤝 Sales":"📐 Est."}</button>`;
   }).join("");
   const legendItems=isTraining?"":allRoles.map(r=>{
