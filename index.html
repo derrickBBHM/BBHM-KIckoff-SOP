@@ -47,6 +47,8 @@
     .role-filter-label{font-size:10px;letter-spacing:2px;color:#8AA0BC;text-transform:uppercase;margin-right:4px;}
     .rf-btn{padding:5px 16px;border-radius:20px;font-size:11px;font-weight:700;cursor:pointer;transition:all 0.2s;border:1.5px solid #C5D4E8;background:#fff;color:#4A6080;}
     .rf-btn.active{color:#fff;border-color:transparent;box-shadow:0 2px 8px rgba(0,0,0,0.15);}
+    .landing-filter-bar{width:100%;background:#fff;border-bottom:1px solid #EEF2F8;padding:10px 20px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:center;position:sticky;top:0;z-index:99;box-shadow:0 2px 8px rgba(13,43,78,0.06);}
+    .drill-filter-bar{width:100%;background:#F7FAFF;border-bottom:1px solid #EEF2F8;padding:10px 20px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:center;}
     /* PROGRESS */
     .progress-wrap{max-width:1200px;margin:0 auto;padding:20px 24px 0;}
     .progress-card{background:#fff;border-radius:14px;border:1px solid #DDE8F4;padding:18px 22px;box-shadow:0 1px 4px rgba(13,43,78,0.05);display:flex;align-items:center;gap:20px;flex-wrap:wrap;}
@@ -924,7 +926,11 @@ function renderLanding(){
   if(currentLandingCat){
     const cat = CATS.find(c=>c.id===currentLandingCat);
     if(!cat){ currentLandingCat=null; return renderLanding(); }
-    const sops = SOPS.filter(s=>s.category===cat.id).sort((a,b)=>(a.order||0)-(b.order||0));
+    const allCatSops = SOPS.filter(s=>s.category===cat.id).sort((a,b)=>(a.order||0)-(b.order||0));
+    const sops = activeRoleFilter==="All" || editMode ? allCatSops : allCatSops.filter(s=>{
+      const roles = s.isTraining?["PM"]:Array.from(new Set((s.steps||[]).flatMap(st=>(st.items||[]).map(i=>i.role))));
+      return roles.includes(activeRoleFilter)||s.owner===activeRoleFilter;
+    });
 
     let squaresHtml = '';
     sops.forEach((sop,idx)=>{
@@ -1000,39 +1006,33 @@ function renderLanding(){
       + (editMode?'🔓 Exit Edit':'🔒')
       + '</button>'
       + '</div></div>'
+      + buildRoleFilterBar('drill-filter-bar')
       + '<div class="sop-square-grid">'+squaresHtml+'</div>';
   }
 
   // Home screen — category squares
   let catCardsHtml = '';
   CATS.forEach(cat=>{
-    const total = SOPS.filter(s=>s.category===cat.id).length;
-    const built = SOPS.filter(s=>s.category===cat.id&&(s.steps&&s.steps.length>0||s.isTraining)).length;
-    catCardsHtml += '<div class="landing-cat-card" onclick="openLandingCat(\''+cat.id+'\')">'
-      + '<div class="landing-cat-icon" style="background:'+cat.color+'20;color:'+cat.color+';">'+cat.icon+'</div>'
-      + '<div class="landing-cat-label">'+cat.label+'</div>'
-      + '<div class="landing-cat-count">'+built+'/'+total+' built</div>'
-      + '</div>';
+    const catSops = SOPS.filter(s=>s.category===cat.id);
+    // Filter: show category if any SOP matches role filter
+    const matchesSops = activeRoleFilter==="All"
+      ? catSops
+      : catSops.filter(s=>{
+          const roles = s.isTraining?["PM"]:Array.from(new Set((s.steps||[]).flatMap(st=>(st.items||[]).map(i=>i.role))));
+          return roles.includes(activeRoleFilter)||s.owner===activeRoleFilter;
+        });
+    if(matchesSops.length===0 && !editMode) return; // hide category if no matching SOPs
+    const total = catSops.length;
+    const built = catSops.filter(s=>s.steps&&s.steps.length>0||s.isTraining).length;
+    catCardsHtml += '<div class="landing-cat-card" onclick="openLandingCat(\''+cat.id+'\')">'      + '<div class="landing-cat-icon" style="background:'+cat.color+'20;color:'+cat.color+';">'+cat.icon+'</div>'      + '<div class="landing-cat-label">'+cat.label+'</div>'      + '<div class="landing-cat-count">'+built+'/'+total+' built</div>'      + '</div>';
   });
   if(editMode){
-    catCardsHtml += '<div class="landing-cat-card" style="border:2px dashed #C5D4E8;color:#8AA0BC;" onclick="openCatModal(null)">'
-      + '<div style="font-size:32px;">➕</div>'
-      + '<div style="font-size:12px;font-weight:700;">Add Category</div>'
-      + '</div>';
+    catCardsHtml += '<div class="landing-cat-card" style="border:2px dashed #C5D4E8;color:#8AA0BC;" onclick="openCatModal(null)">'      + '<div style="font-size:32px;">➕</div>'      + '<div style="font-size:12px;font-weight:700;">Add Category</div>'      + '</div>';
   }
 
-  return '<div class="landing-wrap">'
-    + '<div class="landing-hero" style="background:'+brand.primary+';">'
-    + '<img src="'+logoSrc+'" class="landing-logo" alt="Logo"/>'
-    + '<div class="landing-title">Standard Operating Procedures Hub</div>'
-    + '<div class="landing-sub">'+brand.companyName+'</div>'
-    + '<div style="margin-top:18px;display:flex;gap:10px;flex-wrap:wrap;justify-content:center;">'
-    + '<button onclick="goHub()" style="background:rgba(255,255,255,0.12);border:1px solid rgba(255,255,255,0.3);color:#fff;border-radius:8px;padding:8px 18px;font-size:12px;font-weight:700;cursor:pointer;">📊 Full Hub View</button>'
-    + '<button onclick="toggleEditMode()" style="background:'+(editMode?'rgba(255,255,255,0.35)':'rgba(255,255,255,0.12)')+';border:1px solid rgba(255,255,255,0.3);color:#fff;border-radius:8px;padding:8px 18px;font-size:12px;font-weight:700;cursor:pointer;">'+(editMode?'🔓 Exit Edit':'🔒 Edit Mode')+'</button>'
-    + '</div></div>'
-    + '<div class="landing-cats">'+catCardsHtml+'</div>'
-    + '</div>';
+  return '<div class="landing-wrap">'    + '<div class="landing-hero" style="background:'+brand.primary+';">'    + '<img src="'+logoSrc+'" class="landing-logo" alt="Logo"/>'    + '<div class="landing-title">Standard Operating Procedures Hub</div>'    + '<div class="landing-sub">'+brand.companyName+'</div>'    + '<div style="margin-top:18px;display:flex;gap:10px;flex-wrap:wrap;justify-content:center;">'    + '<button onclick="goHub()" style="background:rgba(255,255,255,0.12);border:1px solid rgba(255,255,255,0.3);color:#fff;border-radius:8px;padding:8px 18px;font-size:12px;font-weight:700;cursor:pointer;">📊 Full Hub View</button>'    + '<button onclick="toggleEditMode()" style="background:'+(editMode?'rgba(255,255,255,0.35)':'rgba(255,255,255,0.12)')+';border:1px solid rgba(255,255,255,0.3);color:#fff;border-radius:8px;padding:8px 18px;font-size:12px;font-weight:700;cursor:pointer;">'+(editMode?'🔓 Exit Edit':'🔒 Edit Mode')+'</button>'    + '</div></div>'    + buildRoleFilterBar('landing-filter-bar')    + '<div class="landing-cats">'+catCardsHtml+'</div>'    + '</div>';
 }
+
 function goLanding(){currentView="landing";currentLandingCat=null;window.scrollTo(0,0);render();}
 function openLandingCat(catId){currentView="landing";currentLandingCat=catId;window.scrollTo(0,0);render();}
 
@@ -1362,6 +1362,16 @@ function handleSearch(val){
 }
 function clearSearch(){searchQuery="";const i=document.getElementById("search-input");if(i)i.value="";handleSearch("");}
 function setRoleFilter(role){activeRoleFilter=role;render();}
+
+function buildRoleFilterBar(wrapClass){
+  const btns = ["All","PM","APM","Sales","Estimator"].map(r=>{
+    const rc=RC[r]||{}; const isActive=activeRoleFilter===r;
+    const style=isActive?(r==="All"?`background:${brand.primary};color:#fff;border-color:transparent;`:`background:${rc.badge};color:#fff;border-color:transparent;`):"";
+    const label=r==="All"?"👥 All":r==="PM"?"🏢 PM":r==="APM"?"🏗️ APM":r==="Sales"?"🤝 Sales":"📐 Estimator";
+    return`<button class="rf-btn ${isActive?'active':''}" style="${style}" onclick="setRoleFilter('${r}')">${label}</button>`;
+  }).join("");
+  return`<div class="${wrapClass}"><span class="role-filter-label">Filter:</span>${btns}</div>`;
+}
 
 // ═══════════════════════════════════════════
 // SOP DETAIL PAGE
