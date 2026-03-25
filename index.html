@@ -907,7 +907,7 @@ function render(){
   if(logoEl) logoEl.src=brand.logoUrl||("data:image/png;base64,"+LOGO_B64);
   if(currentView==="sop"){
     const sop=getSop();
-    if(sop) sop.steps.forEach((_,i)=>expanded[i]=true);
+    // Steps start collapsed — user opens what they need
     renderSteps();
     if(sop&&!sop.isTraining) renderFlowchart();
   }
@@ -1465,7 +1465,7 @@ function renderSteps(){
     const visItems=(step.items||[]).filter(it=>activeRole==="All"||it.role===activeRole);
     if(!visItems.length&&!editingSop)return;
     const allStepRoles=Array.from(new Set((step.items||[]).map(i=>i.role)));
-    const isOpen=expanded[si]!==false;
+    const isOpen=expanded[si]===true;
     const card=document.createElement("div");card.className="step-card";
     const roleBadges=allStepRoles.map(r=>{const rc=RC[r]||{};return`<span class="task-badge" style="background:${rc.bg};color:${rc.text};border:1px solid ${rc.border};">${r}</span>`;}).join("");
     const taskRows=(step.items||[]).map((it,ti)=>{
@@ -1588,7 +1588,7 @@ function deleteStep(si){
 
 function renderTrainingSteps(sop,container){
   (sop.steps||[]).forEach((step,si)=>{
-    const isOpen=expanded[si]!==false;
+    const isOpen=expanded[si]===true;
     const items=step.trainingItems||[];
     const card=document.createElement("div");card.className="step-card";
     const itemsHtml=items.map((item,ii)=>{
@@ -1701,7 +1701,7 @@ function setTaskLink(si,ti,sopId){
 function removeTaskLink(si,ti){delete getSop().steps[si].items[ti].link;renderSteps();}
 function addTask(si){const inp=document.getElementById("nt-"+si);const rol=document.getElementById("nr-"+si);if(!inp.value.trim())return;getSop().steps[si].items=getSop().steps[si].items||[];getSop().steps[si].items.push({text:inp.value.trim(),role:rol.value});inp.value="";renderSteps();}
 function deleteTask(si,ti){if(!confirm("Delete task?"))return;getSop().steps[si].items.splice(ti,1);renderSteps();}
-function toggleStep(idx){expanded[idx]=expanded[idx]===false?true:false;renderSteps();}
+function toggleStep(idx){expanded[idx]=expanded[idx]===true?false:true;renderSteps();}
 function filterRole(btn){
   activeRole=btn.dataset.role;
   document.querySelectorAll(".role-btn").forEach(b=>{
