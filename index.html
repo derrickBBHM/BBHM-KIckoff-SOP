@@ -201,7 +201,12 @@
     .legend-label{font-size:11px;font-weight:700;color:#2A3F5F;}
     .legend-desc{font-size:11px;color:#8AA0BC;}
     /* STEP CARDS */
-    .step-card{background:#fff;border-radius:12px;border:1px solid #DDE8F4;margin-bottom:0;overflow:hidden;box-shadow:0 1px 4px rgba(13,43,78,0.04);}
+    .step-card{background:#fff;border-radius:12px;border:1px solid #DDE8F4;margin-bottom:0;overflow:hidden;box-shadow:0 1px 4px rgba(13,43,78,0.04);transition:box-shadow 0.2s,transform 0.2s;}
+    .step-card.step-dragging{opacity:0.35;transform:scale(0.97);}
+    .step-card.step-drag-over{box-shadow:0 0 0 3px #2563A8;transform:translateY(-2px);}
+    .step-drag-handle{font-size:15px;color:#C5D4E8;cursor:grab;padding:0 4px;flex-shrink:0;user-select:none;}
+    .step-drag-handle:hover{color:#2563A8;}
+    .step-drag-handle:active{cursor:grabbing;}
     .step-connector{display:flex;justify-content:center;align-items:center;height:28px;position:relative;}
     .step-connector::before{content:"";position:absolute;top:0;bottom:0;left:50%;width:2px;background:#DDE8F4;}
     .step-connector-arrow{background:#fff;border:2px solid #DDE8F4;border-radius:50%;width:24px;height:24px;display:flex;align-items:center;justify-content:center;font-size:11px;color:#8AA0BC;z-index:1;flex-shrink:0;}
@@ -216,9 +221,17 @@
     .step-body.collapsed{display:none;}
     .task-row{display:flex;align-items:flex-start;gap:10px;padding:8px 6px;border-radius:7px;transition:background 0.15s;}
     .task-row:hover{background:#F7FAFF;}
+    .task-row.task-dragging{opacity:0.3;background:#EAF1FB;}
+    .task-row.task-drag-over{border-top:2px solid #2563A8;background:#F0F6FF;}
+    .task-drag-handle{font-size:13px;color:#C5D4E8;cursor:grab;flex-shrink:0;padding:0 2px;margin-top:4px;user-select:none;}
+    .task-drag-handle:hover{color:#2563A8;}
+    .task-drag-handle:active{cursor:grabbing;}
     .task-dot{width:6px;height:6px;border-radius:50%;flex-shrink:0;margin-top:7px;}
     .task-text{flex:1;font-size:13px;color:#2A3F5F;line-height:1.55;}
     .task-text-input{flex:1;font-size:13px;color:#0D2B4E;border:1.5px solid #2563A8;border-radius:6px;padding:4px 8px;outline:none;font-family:"Source Sans 3",sans-serif;background:#EAF1FB;}
+    .undo-btn{background:rgba(255,255,255,0.12);border:1px solid rgba(255,255,255,0.3);color:#fff;border-radius:8px;padding:6px 12px;font-size:12px;font-weight:700;cursor:pointer;transition:all 0.15s;}
+    .undo-btn:hover{background:rgba(255,255,255,0.25);}
+    .undo-btn:disabled{opacity:0.35;cursor:default;}
     .task-badge{font-size:9px;font-weight:700;border-radius:4px;padding:2px 8px;white-space:nowrap;flex-shrink:0;margin-top:2px;}
     /* SOP link chip — shown beneath a task */
     .task-sop-link{display:inline-flex;align-items:center;gap:5px;margin-top:5px;padding:4px 10px;background:#EAF1FB;border:1px solid #B8D4F0;border-radius:20px;font-size:11px;font-weight:700;color:#1A3A6E;cursor:pointer;transition:all 0.15s;text-decoration:none;max-width:100%;}
@@ -508,6 +521,7 @@ const DEFAULT_SOPS = [
 let SOPS = JSON.parse(JSON.stringify(DEFAULT_SOPS));
 let CATS = JSON.parse(JSON.stringify(DEFAULT_CATS));
 let editedSOPS = null;
+let undoStack = []; // snapshots of editedSOPS before each change
 let currentView = "landing";
 let currentLandingCat = null; // null = landing home, catId = category drill-down
 let currentSopId = null;
@@ -1073,6 +1087,57 @@ function moveSopRight(catId, sopId){
   if(a&&b){const tmp=a.order;a.order=b.order;b.order=tmp;}
   saveToLocal(); render();
 }
+// ── Task drag & drop within a step ──────────
+let taskDragSi=null, taskDragTi=null;
+function taskDragStart(e,si,ti){
+  taskDragSi=si; taskDragTi=ti;
+  e.dataTransfer.effectAllowed='move';
+  e.stopPropagation();
+  setTimeout(()=>e.target.closest('.task-row').classList.add('task-dragging'),0);
+}
+function taskDragOver(e){
+  e.preventDefault(); e.stopPropagation();
+  e.dataTransfer.dropEffect='move';
+  const row=e.target.closest('.task-row');
+  if(row){
+    document.querySelectorAll('.task-row').forEach(r=>r.classList.remove('task-drag-over'));
+    const ti=parseInt(row.dataset.ti);
+    if(ti!==taskDragTi) row.classList.add('task-drag-over');
+  }
+}
+function taskDragLeave(e){
+  if(!e.currentTarget.contains(e.relatedTarget))
+    e.currentTarget.classList.remove('task-drag-over');
+}
+function taskDragEnd(e){
+  document.querySelectorAll('.task-row').forEach(r=>{
+    r.classList.remove('task-dragging');
+    r.classList.remove('task-drag-over');
+  });
+  taskDragSi=null; taskDragTi=null;
+}
+function taskDragDrop(e,targetSi,targetTi){
+  e.preventDefault(); e.stopPropagation();
+  document.querySelectorAll('.task-row').forEach(r=>r.classList.remove('task-drag-over'));
+  if(taskDragSi===null||taskDragTi===null) return;
+  if(taskDragSi===targetSi && taskDragTi===targetTi) return;
+  pushUndo();
+  const sop=getSop();
+  // Move within same step
+  if(taskDragSi===targetSi){
+    const items=sop.steps[taskDragSi].items;
+    const [moved]=items.splice(taskDragTi,1);
+    items.splice(targetTi,0,moved);
+  } else {
+    // Move across steps
+    const fromItems=sop.steps[taskDragSi].items;
+    const toItems=sop.steps[targetSi].items;
+    const [moved]=fromItems.splice(taskDragTi,1);
+    toItems.splice(targetTi,0,moved);
+  }
+  renderSteps();
+}
+
 function toggleSopArrow(sopId){
   const sop = SOPS.find(s=>s.id===sopId);
   if(!sop) return;
@@ -1405,9 +1470,25 @@ function goBack(){
   if(currentLandingCat){ currentView="landing"; currentSopId=null; editingSop=false; editedSOPS=null; window.scrollTo(0,0); render(); }
   else goHub();
 }
-function startEdit(){editingSop=true;editedSOPS=JSON.parse(JSON.stringify(SOPS));render();}
-function cancelEdit(){editingSop=false;editedSOPS=null;render();}
-function saveEdit(){SOPS=JSON.parse(JSON.stringify(editedSOPS));saveToLocal();editingSop=false;editedSOPS=null;render();}
+function startEdit(){editingSop=true;undoStack=[];editedSOPS=JSON.parse(JSON.stringify(SOPS));render();}
+function cancelEdit(){editingSop=false;undoStack=[];editedSOPS=null;render();}
+function saveEdit(){SOPS=JSON.parse(JSON.stringify(editedSOPS));saveToLocal();editingSop=false;undoStack=[];editedSOPS=null;render();}
+
+// Push current editedSOPS state onto undo stack before a change
+function pushUndo(){
+  if(!editingSop||!editedSOPS) return;
+  undoStack.push(JSON.parse(JSON.stringify(editedSOPS)));
+  if(undoStack.length>30) undoStack.shift(); // cap at 30
+}
+function undoEdit(){
+  if(undoStack.length===0) return;
+  editedSOPS=undoStack.pop();
+  renderSteps();
+  const sop=getSop();
+  if(sop&&!sop.isTraining) renderFlowchart();
+  // Re-render header to update undo button disabled state
+  render();
+}
 
 function renderSopPage(){
   const sop=getSop();if(!sop)return"<p>Not found</p>";
@@ -1444,6 +1525,7 @@ function renderSopPage(){
       <div class="header-actions">
         <span class="save-status hidden" id="save-status"></span>
         ${editMode?`<button class="hdr-btn" onclick="openCardModal(${sop.id},'${sop.category}')">✏️ Card Info</button>`:""}
+        ${editingSop?`<button class="undo-btn" onclick="undoEdit()" ${undoStack.length===0?"disabled":""} title="Undo last change">↩ Undo</button>`:""}
         ${editMode?`<button class="hdr-btn ${editingSop?'active':''}" onclick="${editingSop?'cancelEdit()':'startEdit()'}">
           ${editingSop?'✕ Cancel':'📋 Edit Steps'}</button>`:""}
       </div>
@@ -1502,13 +1584,20 @@ function renderSteps(){
           </select>
           ${it.link?`<div style="font-size:10px;color:#2563A8;margin-top:2px;">🔗 Linked: ${(SOPS.find(s=>s.id===it.link.sopId)||{title:'?'}).title} <button class="task-sop-link-remove" onclick="removeTaskLink(${si},${ti})">✕ remove</button></div>`:''}
         </div>`;
-        return`<div class="task-row" style="${!vis?'opacity:0.4':''}">
-          <div class="task-dot" style="background:${rc.dot};"></div>
-          <div style="flex:1;min-width:0;">
+        return`<div class="task-row" style="${!vis?'opacity:0.4':''}" draggable="true"
+          data-si="${si}" data-ti="${ti}"
+          ondragstart="taskDragStart(event,${si},${ti})"
+          ondragover="taskDragOver(event)"
+          ondragleave="taskDragLeave(event)"
+          ondrop="taskDragDrop(event,${si},${ti})"
+          ondragend="taskDragEnd(event)">
+          <span class="task-drag-handle" title="Drag to reorder">⠿</span>
+          <div class="task-dot" style="background:${rc.dot};margin-top:7px;"></div>
+          <div style="flex:1;min-width:0;" ondragstart="event.stopPropagation()" draggable="false">
             <div style="display:flex;gap:8px;align-items:center;">
-              <input class="task-text-input" style="flex:1;" value="${it.text.replace(/"/g,'&quot;')}" onchange="updateTaskText(${si},${ti},this.value)"/>
-              <select class="task-role-select" style="background:${rc.bg};color:${rc.text};border-color:${rc.border};" onchange="updateTaskRole(${si},${ti},this.value)">${opts}</select>
-              <button class="task-delete" onclick="deleteTask(${si},${ti})">✕</button>
+              <input class="task-text-input" style="flex:1;" draggable="false" value="${it.text.replace(/"/g,'&quot;')}" onchange="updateTaskText(${si},${ti},this.value)"/>
+              <select class="task-role-select" style="background:${rc.bg};color:${rc.text};border-color:${rc.border};" draggable="false" onchange="updateTaskRole(${si},${ti},this.value)">${opts}</select>
+              <button class="task-delete" draggable="false" onclick="event.stopPropagation();deleteTask(${si},${ti})">✕</button>
             </div>
             ${linkPicker}
           </div>
@@ -1540,15 +1629,26 @@ function renderSteps(){
         <button class="add-btn" style="background:${brand.primary};" onclick="addTask(${si})">+ Add Task</button>
       </div>
     </div>`:"";
-    const delBtn=editingSop?`<button class="step-delete-btn" onclick="deleteStep(${si})" title="Delete this step">🗑</button>`:"";
+    const delBtn=editingSop?`<button class="step-delete-btn" draggable="false" onclick="event.stopPropagation();deleteStep(${si})" title="Delete this step">🗑</button>`:"";
+    const dragHandle=editingSop?`<span class="step-drag-handle" title="Drag to reorder">⠿</span>`:"";
+    if(editingSop){
+      card.draggable=true;
+      card.dataset.stepIdx=si;
+      card.ondragstart=e=>stepDragStart(e,si);
+      card.ondragover=e=>stepDragOver(e);
+      card.ondragleave=e=>stepDragLeave(e);
+      card.ondrop=e=>stepDragDrop(e,si);
+      card.ondragend=e=>stepDragEnd(e);
+    }
     card.innerHTML=`
       <div class="step-header" onclick="toggleStep(${si})">
+        ${dragHandle}
         <div class="step-num" style="background:${brand.primary};">${si+1}</div>
         <div class="step-title-wrap">
           ${editingSop
-            ? `<div style="display:flex;gap:6px;align-items:center;">
-                 <input style="font-size:18px;width:44px;border:1.5px solid #C5D4E8;border-radius:6px;padding:2px 4px;text-align:center;outline:none;" value="${step.icon}" onclick="event.stopPropagation()" onchange="updateStepIcon(${si},this.value)" title="Change icon"/>
-                 <input class="step-title-input" style="flex:1;" value="${step.title.replace(/"/g,'&quot;')}" onclick="event.stopPropagation()" onchange="updateStepTitle(${si},this.value)"/>
+            ? `<div style="display:flex;gap:6px;align-items:center;" ondragstart="event.stopPropagation()" draggable="false">
+                 <input style="font-size:18px;width:44px;border:1.5px solid #C5D4E8;border-radius:6px;padding:2px 4px;text-align:center;outline:none;" draggable="false" value="${step.icon}" onclick="event.stopPropagation()" onchange="updateStepIcon(${si},this.value)" title="Change icon"/>
+                 <input class="step-title-input" style="flex:1;" draggable="false" value="${step.title.replace(/"/g,'&quot;')}" onclick="event.stopPropagation()" onchange="updateStepTitle(${si},this.value)"/>
                </div>`
             : `<div class="step-title"><span>${step.icon}</span>${step.title}</div>`
           }
@@ -1594,6 +1694,7 @@ function confirmAddStepGlobal(){
   const icon=(document.getElementById("g-new-icon")||{}).value||"📋";
   const title=(document.getElementById("g-new-title")||{}).value.trim();
   if(!title){alert("Please enter a step title.");return;}
+  pushUndo();
   const sop=getSop();sop.steps=sop.steps||[];
   if(sop.isTraining)sop.steps.push({title,icon,trainingItems:[]});
   else sop.steps.push({title,icon,items:[]});
@@ -1602,6 +1703,7 @@ function confirmAddStepGlobal(){
 }
 function deleteStep(si){
   if(!confirm("Delete this step and all its tasks?"))return;
+  pushUndo();
   getSop().steps.splice(si,1);
   renderSteps();if(!getSop().isTraining)renderFlowchart();
 }
@@ -1617,7 +1719,7 @@ function renderTrainingSteps(sop,container){
       if(editingSop){
         if(item.type==="subheader"){
           return`<div class="training-item training-type-subheader" style="position:relative;">
-            <button class="training-item-delete" onclick="deleteTrainingItem(${si},${ii})">✕</button>
+            <button class="training-item-delete" draggable="false" onclick="event.stopPropagation();deleteTrainingItem(${si},${ii})">✕</button>
             <div style="font-size:9px;font-weight:700;letter-spacing:1px;color:#1A5C3A;margin-bottom:6px;">📌 SUB-HEADER</div>
             <input class="training-input" style="font-weight:700;font-size:14px;margin-bottom:6px;" value="${(item.label||'').replace(/"/g,'&quot;')}" placeholder="Sub-header title..." onchange="updateTrainingItem(${si},${ii},'label',this.value)"/>
             <textarea class="training-textarea" style="border-color:#1A5C3A;background:#F0FAF4;" placeholder="Add notes beneath this header... (start lines with • for bullets)" onchange="updateTrainingItem(${si},${ii},'body',this.value)">${item.body||''}</textarea>
@@ -1632,7 +1734,7 @@ function renderTrainingSteps(sop,container){
           </div>`;
         }
         return`<div class="training-item ${tc}" style="position:relative;">
-          <button class="training-item-delete" onclick="deleteTrainingItem(${si},${ii})">✕</button>
+          <button class="training-item-delete" draggable="false" onclick="event.stopPropagation();deleteTrainingItem(${si},${ii})">✕</button>
           <div style="display:flex;align-items:center;gap:7px;margin-bottom:5px;">
             <span class="training-type-badge">${tl}</span>
             ${item.type!=="note"?`<input class="training-input" style="margin-top:0;" value="${(item.label||'').replace(/"/g,'&quot;')}" placeholder="Label" onchange="updateTrainingItem(${si},${ii},'label',this.value)"/>` :""}
@@ -1688,7 +1790,7 @@ function renderTrainingSteps(sop,container){
         <button class="add-btn" style="background:#1A5C3A;" onclick="addTrainingItem(${si},'subheader')">📌 Sub-Header</button>
       </div>
     </div>`:"";
-    const delBtn=editingSop?`<button class="step-delete-btn" onclick="deleteStep(${si})" title="Delete section">🗑</button>`:"";
+    const delBtn=editingSop?`<button class="step-delete-btn" draggable="false" onclick="event.stopPropagation();deleteStep(${si})" title="Delete section">🗑</button>`:"";
     card.innerHTML=`
       <div class="step-header" onclick="toggleStep(${si})">
         <div class="step-num" style="background:${brand.primary};">${si+1}</div>
@@ -1728,10 +1830,64 @@ function addTrainingItem(si,type){
 }
 function deleteTrainingItem(si,ii){if(!confirm("Delete?"))return;getSop().steps[si].trainingItems.splice(ii,1);renderSteps();}
 function updateTrainingItem(si,ii,field,val){getSop().steps[si].trainingItems[ii][field]=val;saveToLocal();}
-function updateTaskText(si,ti,val){if(val.trim()){getSop().steps[si].items[ti].text=val.trim();saveToLocal();}}
-function updateTaskRole(si,ti,val){getSop().steps[si].items[ti].role=val;renderSteps();}
-function updateStepTitle(si,val){if(val.trim()){getSop().steps[si].title=val.trim();saveToLocal();}}
-function updateStepIcon(si,val){if(val.trim()){getSop().steps[si].icon=val.trim();saveToLocal();}}
+function updateTaskText(si,ti,val){if(val.trim()){pushUndo();getSop().steps[si].items[ti].text=val.trim();saveToLocal();}}
+function updateTaskRole(si,ti,val){pushUndo();getSop().steps[si].items[ti].role=val;renderSteps();}
+function updateStepTitle(si,val){if(val.trim()){pushUndo();getSop().steps[si].title=val.trim();saveToLocal();}}
+function updateStepIcon(si,val){if(val.trim()){pushUndo();getSop().steps[si].icon=val.trim();saveToLocal();}}
+
+// ── Step drag & drop ─────────────────────────
+let stepDragIdx = null;
+function stepDragStart(e,si){
+  stepDragIdx=si;
+  e.dataTransfer.effectAllowed='move';
+  e.stopPropagation();
+  setTimeout(()=>{
+    const cards=document.querySelectorAll('.step-card');
+    if(cards[si]) cards[si].classList.add('step-dragging');
+  },0);
+}
+function stepDragOver(e){
+  e.preventDefault(); e.stopPropagation();
+  e.dataTransfer.dropEffect='move';
+  const card=e.currentTarget;
+  const idx=parseInt(card.dataset.stepIdx);
+  if(idx!==stepDragIdx){
+    document.querySelectorAll('.step-card').forEach(c=>c.classList.remove('step-drag-over'));
+    card.classList.add('step-drag-over');
+  }
+}
+function stepDragLeave(e){
+  if(!e.currentTarget.contains(e.relatedTarget))
+    e.currentTarget.classList.remove('step-drag-over');
+}
+function stepDragEnd(e){
+  document.querySelectorAll('.step-card').forEach(c=>{
+    c.classList.remove('step-dragging');
+    c.classList.remove('step-drag-over');
+  });
+  stepDragIdx=null;
+}
+function stepDragDrop(e,targetIdx){
+  e.preventDefault(); e.stopPropagation();
+  document.querySelectorAll('.step-card').forEach(c=>c.classList.remove('step-drag-over'));
+  if(stepDragIdx===null||stepDragIdx===targetIdx) return;
+  pushUndo();
+  const sop=getSop();
+  const steps=sop.steps;
+  const [moved]=steps.splice(stepDragIdx,1);
+  steps.splice(targetIdx,0,moved);
+  // Keep expansion state in sync
+  const newExpanded={};
+  steps.forEach((_,i)=>{
+    const oldIdx = i<=targetIdx && i>stepDragIdx ? i-1
+                 : i>=targetIdx && i<stepDragIdx ? i+1
+                 : i===targetIdx ? stepDragIdx : i;
+    if(expanded[oldIdx]===true) newExpanded[i]=true;
+  });
+  Object.assign(expanded,newExpanded);
+  saveToLocal(); renderSteps();
+  if(!sop.isTraining) renderFlowchart();
+}
 function setTaskLink(si,ti,sopId){
   const item=getSop().steps[si].items[ti];
   if(!sopId){delete item.link;}
@@ -1749,8 +1905,8 @@ function removeTrainingItemLink(si,ii){
   delete getSop().steps[si].trainingItems[ii].link;
   saveToLocal(); renderSteps();
 }
-function addTask(si){const inp=document.getElementById("nt-"+si);const rol=document.getElementById("nr-"+si);if(!inp.value.trim())return;getSop().steps[si].items=getSop().steps[si].items||[];getSop().steps[si].items.push({text:inp.value.trim(),role:rol.value});inp.value="";renderSteps();}
-function deleteTask(si,ti){if(!confirm("Delete task?"))return;getSop().steps[si].items.splice(ti,1);renderSteps();}
+function addTask(si){const inp=document.getElementById("nt-"+si);const rol=document.getElementById("nr-"+si);if(!inp.value.trim())return;pushUndo();getSop().steps[si].items=getSop().steps[si].items||[];getSop().steps[si].items.push({text:inp.value.trim(),role:rol.value});inp.value="";renderSteps();}
+function deleteTask(si,ti){if(!confirm("Delete task?"))return;pushUndo();getSop().steps[si].items.splice(ti,1);renderSteps();}
 function toggleStep(idx){expanded[idx]=expanded[idx]===true?false:true;renderSteps();}
 function filterRole(btn){
   activeRole=btn.dataset.role;
