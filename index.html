@@ -102,6 +102,7 @@
     .sop-card:hover{box-shadow:0 8px 28px rgba(13,43,78,0.12);transform:translateY(-2px);border-color:#B0C8E8;}
     .sop-card.coming-soon{border-style:dashed;}
     .sop-card.coming-soon:not(.edit-mode-active):hover{transform:none;box-shadow:0 1px 4px rgba(13,43,78,0.05);cursor:default;}
+    .sop-card.coming-soon.edit-mode-active{cursor:pointer;}
     .sop-card.hidden{display:none;}
     .sop-card-stripe{position:absolute;top:0;left:0;right:0;height:3px;}
     .sop-card-num{font-size:9px;font-weight:700;letter-spacing:2px;color:#B0C0D4;text-transform:uppercase;margin-bottom:6px;display:flex;align-items:center;gap:6px;}
@@ -151,8 +152,9 @@
     .sop-square-grid{max-width:960px;margin:0 auto;padding:24px 20px 80px;display:flex;flex-wrap:wrap;gap:14px;justify-content:flex-start;}
     .sop-square{background:#fff;border-radius:14px;border:1px solid #DDE8F4;width:180px;min-height:150px;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:18px 14px;cursor:pointer;box-shadow:0 2px 8px rgba(13,43,78,0.06);transition:all 0.2s;text-align:center;position:relative;overflow:hidden;}
     .sop-square:hover{transform:translateY(-3px);box-shadow:0 8px 24px rgba(13,43,78,0.13);border-color:#B0C8E8;}
-    .sop-square.coming{border-style:dashed;opacity:0.65;cursor:default;}
-    .sop-square.coming:hover{transform:none;box-shadow:0 2px 8px rgba(13,43,78,0.06);}
+    .sop-square.coming{border-style:dashed;opacity:0.65;}
+    .sop-square.coming:not([onclick]):hover{transform:none;box-shadow:0 2px 8px rgba(13,43,78,0.06);}
+    .sop-square.coming[onclick]{cursor:pointer;opacity:0.85;}
     .sop-square-stripe{position:absolute;top:0;left:0;right:0;height:4px;}
     .sop-square-icon{font-size:28px;margin-bottom:8px;}
     .sop-square-title{font-family:"Libre Baskerville",serif;font-size:12px;font-weight:700;color:#0D2B4E;line-height:1.4;}
@@ -962,7 +964,7 @@ function renderLanding(){
       const badge = isCS
         ? '<div class="sop-square-pill">Coming Soon</div>'
         : sop.isTraining ? '<div class="sop-square-training">Training</div>' : '';
-      const clickAttr = isCS ? '' : (editMode ? 'openSopEdit('+sop.id+')' : 'openSop('+sop.id+')');
+      const clickAttr = editMode ? 'openSopEdit('+sop.id+')' : (isCS ? '' : 'openSop('+sop.id+')');
       const dragAttrs = editMode
         ? ' draggable="true"'
           + ' ondragstart="sqDragStart(event,'+sop.id+',\''+cat.id+'\')"'
@@ -1223,7 +1225,7 @@ function renderHub(){
           style="width:280px;flex-shrink:0;margin:7px;"
           data-sop-id="${sop.id}" data-cat-id="${cat.id}"
           ${dragAttrs}
-          onclick="${isComingSoon?'':editMode?'openSopEdit('+sop.id+')':'openSop('+sop.id+')' }">\n          <div class="sop-card-stripe" style="background:${cat.color};"></div>
+          onclick="${editMode?'openSopEdit('+sop.id+')':isComingSoon?'':'openSop('+sop.id+')' }">\n          <div class="sop-card-stripe" style="background:${cat.color};"></div>
           <div class="sop-card-num">
             ${sop.isTraining?'<span style="font-size:9px;background:#EAF1FB;color:#2563A8;border:1px solid #2563A8;border-radius:7px;padding:1px 7px;font-weight:700;">TRAINING</span>':""}
             ${isComingSoon?'<span class="coming-pill">Coming Soon</span>':""}
