@@ -894,7 +894,7 @@ function renderHub(){
       const hasSteps=sop.steps&&sop.steps.length>0;
       const isComingSoon=!hasSteps&&!sop.isTraining;
       const sopRoles=sop.isTraining?["PM"]:Array.from(new Set((sop.steps||[]).flatMap(st=>(st.items||[]).map(i=>i.role))));
-      const matchesRole=activeRoleFilter==="All"||sopRoles.includes(activeRoleFilter);
+      const matchesRole=activeRoleFilter==="All"||sopRoles.includes(activeRoleFilter)||sop.owner===activeRoleFilter;
       const matchesSearch=searchQuery===""||sop.title.toLowerCase().includes(searchQuery)||sop.desc.toLowerCase().includes(searchQuery);
       const hidden=!matchesRole||!matchesSearch;
       const dragAttrs=editMode?`draggable="true" ondragstart="dragStart(event,${sop.id},'${cat.id}')" ondragover="dragOver(event)" ondragleave="dragLeave(event)" ondrop="dragDrop(event,${sop.id},'${cat.id}')" ondragend="dragEnd(event)"`:"";
