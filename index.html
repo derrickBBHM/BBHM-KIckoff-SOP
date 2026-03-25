@@ -752,11 +752,20 @@ function saveCardEdit(){
     }
   }
   saveToLocal(); closeCardModal(); render();
+  // If we're editing steps, refresh editedSOPS snapshot so new card appears in link dropdowns
+  if(currentView==="sop" && editingSop){
+    editedSOPS=JSON.parse(JSON.stringify(SOPS));
+    renderSteps();
+  }
 }
 function deleteSopCard(){
   if(!confirm("Delete this SOP card? This cannot be undone."))return;
   SOPS=SOPS.filter(s=>s.id!==cardModalSopId);
   saveToLocal(); closeCardModal(); render();
+  if(currentView==="sop" && editingSop){
+    editedSOPS=JSON.parse(JSON.stringify(SOPS));
+    renderSteps();
+  }
 }
 
 // ═══════════════════════════════════════════
@@ -1363,6 +1372,7 @@ function handleSearch(val){
 function clearSearch(){searchQuery="";const i=document.getElementById("search-input");if(i)i.value="";handleSearch("");}
 function setRoleFilter(role){activeRoleFilter=role;render();}
 
+
 function buildRoleFilterBar(wrapClass){
   const btns = ["All","PM","APM","Sales","Estimator"].map(r=>{
     const rc=RC[r]||{}; const isActive=activeRoleFilter===r;
@@ -1611,7 +1621,14 @@ function renderTrainingSteps(sop,container){
             <div style="font-size:9px;font-weight:700;letter-spacing:1px;color:#1A5C3A;margin-bottom:6px;">📌 SUB-HEADER</div>
             <input class="training-input" style="font-weight:700;font-size:14px;margin-bottom:6px;" value="${(item.label||'').replace(/"/g,'&quot;')}" placeholder="Sub-header title..." onchange="updateTrainingItem(${si},${ii},'label',this.value)"/>
             <textarea class="training-textarea" style="border-color:#1A5C3A;background:#F0FAF4;" placeholder="Add notes beneath this header... (start lines with • for bullets)" onchange="updateTrainingItem(${si},${ii},'body',this.value)">${item.body||''}</textarea>
-            <div class="training-textarea-hint" style="color:#1A5C3A;">💡 Start each line with • for bullet points</div>
+            <div class="training-textarea-hint" style="color:#1A5C3A;">💡 Start each line with • to create a bullet point</div>
+            <div style="margin-top:6px;">
+              <select class="task-link-select" onchange="setTrainingItemLink(${si},${ii},this.value)">
+                <option value="">— Link to another SOP card —</option>
+                ${SOPS.filter(s=>s.id!==currentSopId).map(s=>`<option value="${s.id}"${item.link&&item.link.sopId===s.id?'selected':''}>${s.title}</option>`).join('')}
+              </select>
+              ${item.link?`<div style="font-size:10px;color:#2563A8;margin-top:2px;">🔗 Linked: ${(SOPS.find(s=>s.id===item.link.sopId)||{title:'?'}).title} <button class="task-sop-link-remove" onclick="removeTrainingItemLink(${si},${ii})">✕ remove</button></div>`:''}
+            </div>
           </div>`;
         }
         return`<div class="training-item ${tc}" style="position:relative;">
@@ -1622,32 +1639,45 @@ function renderTrainingSteps(sop,container){
           </div>
           ${item.type==="video"?`<input class="training-input" value="${(item.url||'').replace(/"/g,'&quot;')}" placeholder="YouTube or Loom URL..." onchange="updateTrainingItem(${si},${ii},'url',this.value)"/>` :""}
           ${item.type==="image"?`<input class="training-input" value="${(item.url||'').replace(/"/g,'&quot;')}" placeholder="Image URL (imgur.com)..." onchange="updateTrainingItem(${si},${ii},'url',this.value)"/>` :""}
-          ${item.type==="note"?`<textarea class="training-textarea" onchange="updateTrainingItem(${si},${ii},'label',this.value)">${item.label||''}</textarea><div class="training-textarea-hint">💡 Start each line with • to create a bullet point</div>`:""}
+          ${item.type==="note"?`<textarea class="training-textarea" onchange="updateTrainingItem(${si},${ii},'label',this.value)">${item.label||''}</textarea><div class="training-textarea-hint">💡 Start each line with • to create a bullet point</div>
+          <div style="margin-top:6px;">
+            <select class="task-link-select" onchange="setTrainingItemLink(${si},${ii},this.value)">
+              <option value="">— Link to another SOP card —</option>
+              ${SOPS.filter(s=>s.id!==currentSopId).map(s=>`<option value="${s.id}"${item.link&&item.link.sopId===s.id?'selected':''}>${s.title}</option>`).join('')}
+            </select>
+            ${item.link?`<div style="font-size:10px;color:#2563A8;margin-top:2px;">🔗 Linked: ${(SOPS.find(s=>s.id===item.link.sopId)||{title:'?'}).title} <button class="task-sop-link-remove" onclick="removeTrainingItemLink(${si},${ii})">✕ remove</button></div>`:''}
+          </div>`:""}
         </div>`;
       }
       // VIEW MODE
       if(item.type==="subheader"){
         const bodyText=item.body||'';
-        const bodyLines=bodyText.split('\n').map(line=>{
+        const _subHtml=bodyText.split('\n').map(line=>{
           const t=line.trim();if(!t)return'';
           if(t.startsWith('•')||t.startsWith('-')||t.startsWith('*'))return`<li>${t.replace(/^[•\-\*]\s*/,'')}</li>`;
           return`<span style="display:block;">${t}</span>`;
         }).join('');
-        const hasBodyBullets=bodyText.split('\n').some(l=>{const t=l.trim();return t.startsWith('•')||t.startsWith('-')||t.startsWith('*');});
+        const _subBullets=bodyText.split('\n').some(l=>{const t=l.trim();return t.startsWith('•')||t.startsWith('-')||t.startsWith('*');});
+        const _subLink = item.link ? SOPS.find(s=>s.id===item.link.sopId) : null;
+        const _subLinkChip = _subLink ? `<div style="margin-top:6px;"><span class="task-sop-link" onclick="openSop(${_subLink.id})"><span class="task-sop-link-icon">📋</span><span>See SOP: ${_subLink.title}</span><span style="font-size:10px;opacity:0.6;">→</span></span></div>` : '';
         return`<div class="training-item training-type-subheader">
           <div class="training-subheader-title">${item.label||''}</div>
-          ${bodyText?`<div class="training-subheader-body">${hasBodyBullets?`<ul>${bodyLines}</ul>`:bodyLines}</div>`:''}
+          ${bodyText?`<div class="training-subheader-body">${_subBullets?`<ul>${_subHtml}</ul>`:_subHtml}</div>`:''}
+          ${_subLinkChip}
         </div>`;
       }
       if(item.type==="video")return`<div class="training-item ${tc}"><div class="training-item-label">${item.url?'':  `<span class="training-type-badge">${tl}</span>`}${item.label}</div>${item.url?`<a class="training-link-btn" style="background:${brand.primary};" href="${item.url}" target="_blank">▶ Watch Video</a>`:`<span style="font-size:12px;color:#8AA0BC;font-style:italic;">No link yet — add one in edit mode</span>`}</div>`;
       if(item.type==="image")return`<div class="training-item ${tc}"><div class="training-item-label">${item.url?'':  `<span class="training-type-badge">${tl}</span>`}${item.label}</div>${item.url?`<img class="training-img" src="${item.url}" alt="${item.label}" onerror="this.style.display='none'"/>`:`<span style="font-size:12px;color:#8AA0BC;font-style:italic;">No image yet</span>`}</div>`;
-      const noteHtml=item.label.split('\n').map(line=>{
+      const _noteHtml=item.label.split('\n').map(line=>{
         const t=line.trim();if(!t)return'';
         if(t.startsWith('•')||t.startsWith('-')||t.startsWith('*'))return`<li>${t.replace(/^[•\-\*]\s*/,'')}</li>`;
         return`<span style="display:block;">${t}</span>`;
       }).join('');
-      const hasBullets=item.label.split('\n').some(l=>{const t=l.trim();return t.startsWith('•')||t.startsWith('-')||t.startsWith('*');});
-      return`<div class="training-item ${tc}"><div class="training-note">${hasBullets?`<ul>${noteHtml}</ul>`:noteHtml}</div></div>`;
+      const _hasBullets=item.label.split('\n').some(l=>{const t=l.trim();return t.startsWith('•')||t.startsWith('-')||t.startsWith('*');});
+      // Show SOP link chip if set
+      const _noteLink = item.link ? SOPS.find(s=>s.id===item.link.sopId) : null;
+      const _noteLinkChip = _noteLink ? `<div style="margin-top:5px;"><span class="task-sop-link" onclick="openSop(${_noteLink.id})"><span class="task-sop-link-icon">📋</span><span>See SOP: ${_noteLink.title}</span><span style="font-size:10px;opacity:0.6;">→</span></span></div>` : '';
+      return`<div class="training-item ${tc}"><div class="training-note">${_hasBullets?`<ul>${_noteHtml}</ul>`:_noteHtml}${_noteLinkChip}</div></div>`;
     }).join("");
     const addBar=editingSop?`<div class="step-edit-bar">
       <div style="font-size:10px;color:#8AA0BC;font-weight:700;letter-spacing:1px;margin-bottom:7px;">ADD TO THIS SECTION:</div>
@@ -1709,6 +1739,16 @@ function setTaskLink(si,ti,sopId){
   renderSteps();
 }
 function removeTaskLink(si,ti){delete getSop().steps[si].items[ti].link;renderSteps();}
+function setTrainingItemLink(si,ii,sopId){
+  const item=getSop().steps[si].trainingItems[ii];
+  if(!sopId){delete item.link;}
+  else{const linked=SOPS.find(s=>s.id==sopId);if(linked)item.link={sopId:linked.id};}
+  saveToLocal(); renderSteps();
+}
+function removeTrainingItemLink(si,ii){
+  delete getSop().steps[si].trainingItems[ii].link;
+  saveToLocal(); renderSteps();
+}
 function addTask(si){const inp=document.getElementById("nt-"+si);const rol=document.getElementById("nr-"+si);if(!inp.value.trim())return;getSop().steps[si].items=getSop().steps[si].items||[];getSop().steps[si].items.push({text:inp.value.trim(),role:rol.value});inp.value="";renderSteps();}
 function deleteTask(si,ti){if(!confirm("Delete task?"))return;getSop().steps[si].items.splice(ti,1);renderSteps();}
 function toggleStep(idx){expanded[idx]=expanded[idx]===true?false:true;renderSteps();}
