@@ -251,6 +251,9 @@
     .training-type-video .training-type-badge{background:#EAF1FB;color:#2563A8;}
     .training-type-image .training-type-badge{background:#F0EAF8;color:#7B3FC7;}
     .training-type-note .training-type-badge{background:#FFF4E6;color:#C07A10;}
+    .training-type-file .training-type-badge{background:#FFEAEA;color:#C0392B;}
+    .training-file-btn{display:inline-flex;align-items:center;gap:6px;color:#fff;text-decoration:none;border-radius:7px;padding:7px 15px;font-size:12px;font-weight:700;margin-top:6px;background:#C0392B;transition:all 0.15s;}
+    .training-file-btn:hover{background:#A93226;transform:translateY(-1px);}
     .training-type-subheader{background:#F0F4FA;border:none;border-left:4px solid var(--sh-color,#2563A8);border-radius:0 10px 10px 0;padding:12px 16px;}
     .training-subheader-title{font-family:"Libre Baskerville",serif;font-size:14px;font-weight:700;color:#0D2B4E;margin-bottom:6px;}
     .training-subheader-body{font-size:13px;color:#2A3F5F;line-height:1.65;}
@@ -1894,7 +1897,7 @@ function renderTrainingSteps(sop,container){
     const items=step.trainingItems||[];
     const card=document.createElement("div");card.className="step-card";
     const itemsHtml=items.map((item,ii)=>{
-      const tl=item.type==="video"?"▶ VIDEO":item.type==="image"?"🖼 IMAGE":item.type==="subheader"?"📌 SUB-HEADER":"📝 NOTE";
+      const tl=item.type==="video"?"▶ VIDEO":item.type==="image"?"🖼 IMAGE":item.type==="file"?"📎 DOCUMENT":item.type==="subheader"?"📌 SUB-HEADER":"📝 NOTE";
       const tc="training-type-"+item.type;
       if(editingSop){
         if(item.type==="subheader"){
@@ -1921,6 +1924,7 @@ function renderTrainingSteps(sop,container){
           </div>
           ${item.type==="video"?`<input class="training-input" value="${(item.url||'').replace(/"/g,'&quot;')}" placeholder="YouTube or Loom URL..." onchange="updateTrainingItem(${si},${ii},'url',this.value)"/>` :""}
           ${item.type==="image"?`<input class="training-input" value="${(item.url||'').replace(/"/g,'&quot;')}" placeholder="Image URL (imgur.com)..." onchange="updateTrainingItem(${si},${ii},'url',this.value)"/>` :""}
+          ${item.type==="file"?`<input class="training-input" style="border-color:#C0392B;background:#FFF5F5;" value="${(item.url||'').replace(/"/g,'&quot;')}" placeholder="PDF or document URL (Google Drive, Dropbox, etc.)..." onchange="updateTrainingItem(${si},${ii},'url',this.value)"/><div class="training-textarea-hint" style="color:#C0392B;">💡 Upload to Google Drive → Share → Anyone with link → paste link here</div>` :""}
           ${item.type==="note"?`<textarea class="training-textarea" onchange="updateTrainingItem(${si},${ii},'label',this.value)">${item.label||''}</textarea><div class="training-textarea-hint">💡 Start each line with • to create a bullet point</div>
           <div style="margin-top:6px;">
             <select class="task-link-select" onchange="setTrainingItemLink(${si},${ii},this.value)">
@@ -1949,6 +1953,7 @@ function renderTrainingSteps(sop,container){
         </div>`;
       }
       if(item.type==="video")return`<div class="training-item ${tc}"><div class="training-item-label">${item.url?'':  `<span class="training-type-badge">${tl}</span>`}${item.label}</div>${item.url?`<a class="training-link-btn" style="background:${brand.primary};" href="${item.url}" target="_blank">▶ Watch Video</a>`:`<span style="font-size:12px;color:#8AA0BC;font-style:italic;">No link yet — add one in edit mode</span>`}</div>`;
+      if(item.type==="file")return`<div class="training-item ${tc}"><div class="training-item-label">${item.url?'':`<span class="training-type-badge">${tl}</span>`}${item.label}</div>${item.url?`<a class="training-file-btn" href="${item.url}" target="_blank" rel="noopener">📎 View Document</a>`:`<span style="font-size:12px;color:#8AA0BC;font-style:italic;">No document attached yet — add one in edit mode</span>`}</div>`;
       if(item.type==="image")return`<div class="training-item ${tc}"><div class="training-item-label">${item.url?'':  `<span class="training-type-badge">${tl}</span>`}${item.label}</div>${item.url?`<img class="training-img" src="${item.url}" alt="${item.label}" onerror="this.style.display='none'"/>`:`<span style="font-size:12px;color:#8AA0BC;font-style:italic;">No image yet</span>`}</div>`;
       const _noteHtml=item.label.split('\n').map(line=>{
         const t=line.trim();if(!t)return'';
@@ -1966,6 +1971,7 @@ function renderTrainingSteps(sop,container){
       <div class="add-row">
         <button class="add-btn" style="background:#2563A8;" onclick="addTrainingItem(${si},'video')">▶ Video</button>
         <button class="add-btn" style="background:#7B3FC7;" onclick="addTrainingItem(${si},'image')">🖼 Image</button>
+        <button class="add-btn" style="background:#C0392B;" onclick="addTrainingItem(${si},'file')">📎 Document</button>
         <button class="add-btn" style="background:#C07A10;" onclick="addTrainingItem(${si},'note')">📝 Note</button>
         <button class="add-btn" style="background:#1A5C3A;" onclick="addTrainingItem(${si},'subheader')">📌 Sub-Header</button>
       </div>
@@ -2018,6 +2024,7 @@ function addTrainingItem(si,type){
   const sop=getSop(); sop.steps[si].trainingItems=sop.steps[si].trainingItems||[];
   if(type==="subheader") sop.steps[si].trainingItems.push({type,label:"New Sub-Header",body:""});
   else if(type==="note")  sop.steps[si].trainingItems.push({type,label:"",url:""});
+  else if(type==="file")  sop.steps[si].trainingItems.push({type,label:"New Document",url:""});
   else                    sop.steps[si].trainingItems.push({type,label:"New "+type,url:""});
   renderSteps();
 }
