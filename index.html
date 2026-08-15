@@ -743,58 +743,79 @@ function saveBrandLocal(){
   }, 800);
 }
 // ═══════════════════════════════════════════
-// FILE UPLOAD (Firebase Storage)
+// FILE UPLOAD — base64 first (no setup), Storage for large files
 // ═══════════════════════════════════════════
+function fileToBase64(file){
+  return new Promise((resolve,reject)=>{
+    const r=new FileReader();
+    r.onload=()=>resolve(r.result);
+    r.onerror=()=>reject(new Error("Could not read file"));
+    r.readAsDataURL(file);
+  });
+}
+
 async function uploadFileToStorage(file, folder){
   if(!storage && !initFirebase()) throw new Error("Storage not available");
-  if(!storage) throw new Error("Firebase Storage not enabled");
-  // Sanitize filename and add timestamp so uploads never collide
+  if(!storage) throw new Error("Firebase Storage is not enabled");
   const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g,'_');
   const path = `${folder}/${Date.now()}_${safeName}`;
   const ref = storage.ref().child(path);
-  const snapshot = await ref.put(file);
-  return await snapshot.ref.getDownloadURL();
+  // Race the upload against a 20s timeout so it can't hang forever
+  const upload = ref.put(file).then(snap=>snap.ref.getDownloadURL());
+  const timeout = new Promise((_,rej)=>setTimeout(()=>rej(new Error("Upload timed out — Firebase Storage may not be enabled")),20000));
+  return await Promise.race([upload,timeout]);
 }
 
-// Handles an <input type="file"> change for training items
 async function handleTrainingUpload(si, ii, inputEl){
   const file = inputEl.files && inputEl.files[0];
   if(!file) return;
-  const maxMB = 25;
-  if(file.size > maxMB*1024*1024){ alert(`File is too large. Max ${maxMB}MB.`); inputEl.value=''; return; }
-  const statusId = `upl-${si}-${ii}`;
-  const statusEl = document.getElementById(statusId);
-  if(statusEl) statusEl.textContent = "⏳ Uploading...";
+  const statusEl = document.getElementById(`upl-${si}-${ii}`);
+  const setStatus = t=>{ if(statusEl) statusEl.textContent=t; };
+  if(file.size > 25*1024*1024){ alert("File is too large. Max 25MB."); inputEl.value=''; return; }
+  setStatus("⏳ Uploading...");
   try{
-    const url = await uploadFileToStorage(file, "training");
+    let url;
+    // Files under 700KB go straight into Firestore as base64 — no Storage setup needed
+    if(file.size < 700*1024){
+      url = await fileToBase64(file);
+    } else {
+      setStatus("⏳ Large file — uploading to Storage...");
+      url = await uploadFileToStorage(file, "training");
+    }
     const item = getSop().steps[si].trainingItems[ii];
     item.url = url;
     if(!item.label || item.label==="New Document" || item.label==="New image") item.label = file.name;
+    setStatus("✅ Uploaded");
     saveToLocal();
     renderSteps();
   }catch(e){
     console.error("Upload failed:",e);
-    if(statusEl) statusEl.textContent = "❌ Upload failed — check Firebase Storage is enabled";
-    alert("Upload failed. Make sure Firebase Storage is enabled in your Firebase console.");
+    setStatus("❌ "+(e.message||"Upload failed"));
+    alert("Upload failed: "+(e.message||"unknown error")+"\n\nFor files over 700KB you'll need to enable Firebase Storage, or use a smaller file.");
+    inputEl.value='';
   }
 }
 
-// Handles logo upload in the branding modal
 async function handleLogoUpload(inputEl){
   const file = inputEl.files && inputEl.files[0];
   if(!file) return;
-  if(file.size > 5*1024*1024){ alert("Logo too large. Max 5MB."); inputEl.value=''; return; }
   const statusEl = document.getElementById("logo-upload-status");
-  if(statusEl) statusEl.textContent = "⏳ Uploading...";
+  const setStatus = t=>{ if(statusEl) statusEl.textContent=t; };
+  if(file.size > 700*1024){
+    alert("Logo is too large. Please use an image under 700KB.\n\nTip: most logos should be well under 200KB — try resizing or exporting as PNG at a smaller size.");
+    inputEl.value=''; return;
+  }
+  setStatus("⏳ Reading image...");
   try{
-    const url = await uploadFileToStorage(file, "branding");
-    document.getElementById("logo-url-input").value = url;
+    const dataUrl = await fileToBase64(file);
+    document.getElementById("logo-url-input").value = dataUrl;
     const prev = document.getElementById("logo-preview");
-    if(prev){ prev.src = url; prev.style.display = "block"; }
-    if(statusEl) statusEl.textContent = "✅ Uploaded — click Save Branding to apply";
+    if(prev){ prev.src = dataUrl; prev.style.display = "block"; }
+    setStatus("✅ Ready — click Save Branding to apply");
   }catch(e){
     console.error("Logo upload failed:",e);
-    if(statusEl) statusEl.textContent = "❌ Upload failed — check Firebase Storage is enabled";
+    setStatus("❌ "+(e.message||"Could not read image"));
+    inputEl.value='';
   }
 }
 
