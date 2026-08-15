@@ -253,6 +253,14 @@
     .training-type-image .training-type-badge{background:#F0EAF8;color:#7B3FC7;}
     .training-type-note .training-type-badge{background:#FFF4E6;color:#C07A10;}
     .training-type-file .training-type-badge{background:#FFEAEA;color:#C0392B;}
+    .training-type-file{background:#FFF9F9;border-color:#F5D5D5;}
+    .doc-card{display:flex;align-items:center;gap:14px;background:#fff;border:1px solid #E8D5D5;border-left:4px solid #C0392B;border-radius:10px;padding:14px 18px;text-decoration:none;transition:all 0.18s;cursor:pointer;}
+    .doc-card:hover{background:#FFF5F5;transform:translateX(3px);box-shadow:0 4px 14px rgba(192,57,43,0.13);}
+    .doc-card-icon{font-size:26px;flex-shrink:0;}
+    .doc-card-body{flex:1;min-width:0;}
+    .doc-card-title{font-family:"Libre Baskerville",serif;font-size:14px;font-weight:700;color:#0D2B4E;line-height:1.35;}
+    .doc-card-sub{font-size:11px;color:#8AA0BC;margin-top:2px;}
+    .doc-card-arrow{font-size:16px;color:#C0392B;flex-shrink:0;font-weight:700;}
     .training-file-btn{display:inline-flex;align-items:center;gap:6px;color:#fff;text-decoration:none;border-radius:7px;padding:7px 15px;font-size:12px;font-weight:700;margin-top:6px;background:#C0392B;transition:all 0.15s;}
     .training-file-btn:hover{background:#A93226;transform:translateY(-1px);}
     .training-type-subheader{background:#F0F4FA;border:none;border-left:4px solid var(--sh-color,#2563A8);border-radius:0 10px 10px 0;padding:12px 16px;}
@@ -2019,11 +2027,11 @@ function renderTrainingSteps(sop,container){
           </div>
           ${item.type==="video"?`<input class="training-input" value="${(item.url||'').replace(/"/g,'&quot;')}" placeholder="YouTube or Loom URL..." onchange="updateTrainingItem(${si},${ii},'url',this.value)"/>` :""}
           ${item.type==="image"?`<input class="training-input" value="${(item.url||'').replace(/"/g,'&quot;')}" placeholder="Image URL, or upload below..." onchange="updateTrainingItem(${si},${ii},'url',this.value)"/>
-          <label style="background:#7B3FC7;color:#fff;border-radius:7px;padding:6px 13px;font-size:11px;font-weight:700;cursor:pointer;display:inline-block;margin-top:6px;">📤 Upload Image
+          <label draggable="false" onclick="event.stopPropagation()" ondragstart="event.stopPropagation()" style="background:#7B3FC7;color:#fff;border-radius:7px;padding:6px 13px;font-size:11px;font-weight:700;cursor:pointer;display:inline-block;margin-top:6px;">📤 Choose Image
             <input type="file" accept="image/*" style="display:none;" onchange="handleTrainingUpload(${si},${ii},this)"/>
           </label><span id="upl-${si}-${ii}" style="font-size:11px;color:#8AA0BC;margin-left:8px;"></span>` :""}
           ${item.type==="file"?`<input class="training-input" style="border-color:#C0392B;background:#FFF5F5;" value="${(item.url||'').replace(/"/g,'&quot;')}" placeholder="Document URL, or upload below..." onchange="updateTrainingItem(${si},${ii},'url',this.value)"/>
-          <label style="background:#C0392B;color:#fff;border-radius:7px;padding:6px 13px;font-size:11px;font-weight:700;cursor:pointer;display:inline-block;margin-top:6px;">📤 Upload PDF / Document
+          <label draggable="false" onclick="event.stopPropagation()" ondragstart="event.stopPropagation()" style="background:#C0392B;color:#fff;border-radius:7px;padding:6px 13px;font-size:11px;font-weight:700;cursor:pointer;display:inline-block;margin-top:6px;">📤 Choose PDF / Document
             <input type="file" accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv" style="display:none;" onchange="handleTrainingUpload(${si},${ii},this)"/>
           </label><span id="upl-${si}-${ii}" style="font-size:11px;color:#8AA0BC;margin-left:8px;"></span>` :""}
           ${item.type==="note"?`<textarea class="training-textarea" onchange="updateTrainingItem(${si},${ii},'label',this.value)">${item.label||''}</textarea><div class="training-textarea-hint">💡 Start each line with • to create a bullet point</div>
@@ -2054,7 +2062,17 @@ function renderTrainingSteps(sop,container){
         </div>`;
       }
       if(item.type==="video")return`<div class="training-item ${tc}"><div class="training-item-label">${item.url?'':  `<span class="training-type-badge">${tl}</span>`}${item.label}</div>${item.url?`<a class="training-link-btn" style="background:${brand.primary};" href="${item.url}" target="_blank">▶ Watch Video</a>`:`<span style="font-size:12px;color:#8AA0BC;font-style:italic;">No link yet — add one in edit mode</span>`}</div>`;
-      if(item.type==="file")return`<div class="training-item ${tc}"><div class="training-item-label">${item.url?'':`<span class="training-type-badge">${tl}</span>`}${item.label}</div>${item.url?`<a class="training-file-btn" href="${item.url}" target="_blank" rel="noopener">📎 View Document</a>`:`<span style="font-size:12px;color:#8AA0BC;font-style:italic;">No document attached yet — add one in edit mode</span>`}</div>`;
+      if(item.type==="file"){
+        if(!item.url) return`<div class="training-item ${tc}"><div class="training-item-label"><span class="training-type-badge">${tl}</span>${item.label}</div><span style="font-size:12px;color:#8AA0BC;font-style:italic;">No document attached yet — add one in edit mode</span></div>`;
+        return`<a class="doc-card" href="${item.url}" target="_blank" rel="noopener">
+          <span class="doc-card-icon">📄</span>
+          <span class="doc-card-body">
+            <span class="doc-card-title" style="display:block;">${item.label}</span>
+            <span class="doc-card-sub">Click to open document</span>
+          </span>
+          <span class="doc-card-arrow">→</span>
+        </a>`;
+      }
       if(item.type==="image")return`<div class="training-item ${tc}"><div class="training-item-label">${item.url?'':  `<span class="training-type-badge">${tl}</span>`}${item.label}</div>${item.url?`<img class="training-img" src="${item.url}" alt="${item.label}" onerror="this.style.display='none'"/>`:`<span style="font-size:12px;color:#8AA0BC;font-style:italic;">No image yet</span>`}</div>`;
       const _noteHtml=item.label.split('\n').map(line=>{
         const t=line.trim();if(!t)return'';
@@ -2230,6 +2248,16 @@ function renderFlowchart(){
   if(sop.endLabel)html+=`<div class="flow-arrow">↓</div><div class="flow-node fend"><span style="font-size:13px;">✅</span><span class="flow-label">${sop.endLabel}</span></div>`;
   fc.innerHTML=html;
 }
+
+// Prevent the browser from opening a file when it's dropped anywhere on the page.
+// Without this, dropping a PDF navigates away from the app.
+["dragover","drop"].forEach(evt=>{
+  window.addEventListener(evt, e=>{
+    if(e.target && e.target.tagName === "INPUT" && e.target.type === "file") return;
+    e.preventDefault();
+    e.stopPropagation();
+  }, false);
+});
 
 render();
 </script>
