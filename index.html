@@ -7,6 +7,7 @@
   <!-- Firebase -->
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-storage-compat.js"></script>
   <link href="https://fonts.googleapis.com/css2?family=Libre+Baskerville:wght@400;700&family=Source+Sans+3:wght@300;400;600;700&display=swap" rel="stylesheet"/>
   <style>
     *{margin:0;padding:0;box-sizing:border-box;}
@@ -362,7 +363,20 @@
     <p>Change colors, logo, and company name.</p>
     <div class="modal-section"><label class="modal-label">Primary Color</label><div class="color-row" id="primary-swatches"></div></div>
     <div class="modal-section"><label class="modal-label">Accent Color</label><div class="color-row" id="accent-swatches"></div></div>
-    <div class="modal-section"><label class="modal-label">Logo URL (upload to imgur.com first)</label><input class="modal-input" id="logo-url-input" placeholder="https://i.imgur.com/yourlogo.png" style="margin-top:6px;"/></div>
+    <div class="modal-section">
+      <label class="modal-label">Company Logo</label>
+      <div style="display:flex;gap:10px;align-items:center;margin-top:8px;flex-wrap:wrap;">
+        <label style="background:#2563A8;color:#fff;border-radius:8px;padding:9px 16px;font-size:12px;font-weight:700;cursor:pointer;display:inline-block;">
+          📤 Upload from Computer
+          <input type="file" accept="image/png,image/jpeg,image/svg+xml,image/webp" style="display:none;" onchange="handleLogoUpload(this)"/>
+        </label>
+        <img id="logo-preview" src="" style="width:44px;height:44px;object-fit:contain;border-radius:8px;border:1px solid #DDE8F4;display:none;background:#fff;"/>
+      </div>
+      <div id="logo-upload-status" style="font-size:11px;color:#8AA0BC;margin-top:5px;"></div>
+      <label class="modal-label" style="margin-top:10px;display:block;">Or paste an image URL</label>
+      <input class="modal-input" id="logo-url-input" placeholder="https://..." style="margin-top:6px;"/>
+      <div style="font-size:10px;color:#8AA0BC;margin-top:4px;font-style:italic;">PNG with transparent background works best</div>
+    </div>
     <div class="modal-section"><label class="modal-label">Company Name</label><input class="modal-input" id="company-name-input" style="margin-top:6px;"/></div>
     <div class="modal-btns">
       <button class="modal-cancel-btn" onclick="closeCustomizeModal()">Cancel</button>
@@ -628,7 +642,7 @@ const firebaseConfig = {
   messagingSenderId: "664920270791",
   appId: "1:664920270791:web:93edaafdefbccc80305be2"
 };
-let db = null, DOC_SOPS = null, DOC_CATS = null, DOC_BRAND = null, DOC_WORKFLOW = null, DOC_ROLES = null;
+let db = null, storage = null, DOC_SOPS = null, DOC_CATS = null, DOC_BRAND = null, DOC_WORKFLOW = null, DOC_ROLES = null;
 let firebaseReady = false;
 // Domains allowed to write to Firebase — add your custom domain here when ready
 // Strip undefined/null values deep — Firestore rejects undefined fields
@@ -641,6 +655,7 @@ function initFirebase(){
     if(typeof firebase === "undefined") return false;
     if(!firebase.apps.length) firebase.initializeApp(firebaseConfig);
     db = firebase.firestore();
+    try{ storage = firebase.storage(); }catch(e){ console.warn("Storage unavailable:",e); }
     DOC_SOPS     = db.collection("bbhm").doc("sops");
     DOC_CATS     = db.collection("bbhm").doc("cats");
     DOC_BRAND    = db.collection("bbhm").doc("brand");
@@ -727,6 +742,62 @@ function saveBrandLocal(){
     }
   }, 800);
 }
+// ═══════════════════════════════════════════
+// FILE UPLOAD (Firebase Storage)
+// ═══════════════════════════════════════════
+async function uploadFileToStorage(file, folder){
+  if(!storage && !initFirebase()) throw new Error("Storage not available");
+  if(!storage) throw new Error("Firebase Storage not enabled");
+  // Sanitize filename and add timestamp so uploads never collide
+  const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g,'_');
+  const path = `${folder}/${Date.now()}_${safeName}`;
+  const ref = storage.ref().child(path);
+  const snapshot = await ref.put(file);
+  return await snapshot.ref.getDownloadURL();
+}
+
+// Handles an <input type="file"> change for training items
+async function handleTrainingUpload(si, ii, inputEl){
+  const file = inputEl.files && inputEl.files[0];
+  if(!file) return;
+  const maxMB = 25;
+  if(file.size > maxMB*1024*1024){ alert(`File is too large. Max ${maxMB}MB.`); inputEl.value=''; return; }
+  const statusId = `upl-${si}-${ii}`;
+  const statusEl = document.getElementById(statusId);
+  if(statusEl) statusEl.textContent = "⏳ Uploading...";
+  try{
+    const url = await uploadFileToStorage(file, "training");
+    const item = getSop().steps[si].trainingItems[ii];
+    item.url = url;
+    if(!item.label || item.label==="New Document" || item.label==="New image") item.label = file.name;
+    saveToLocal();
+    renderSteps();
+  }catch(e){
+    console.error("Upload failed:",e);
+    if(statusEl) statusEl.textContent = "❌ Upload failed — check Firebase Storage is enabled";
+    alert("Upload failed. Make sure Firebase Storage is enabled in your Firebase console.");
+  }
+}
+
+// Handles logo upload in the branding modal
+async function handleLogoUpload(inputEl){
+  const file = inputEl.files && inputEl.files[0];
+  if(!file) return;
+  if(file.size > 5*1024*1024){ alert("Logo too large. Max 5MB."); inputEl.value=''; return; }
+  const statusEl = document.getElementById("logo-upload-status");
+  if(statusEl) statusEl.textContent = "⏳ Uploading...";
+  try{
+    const url = await uploadFileToStorage(file, "branding");
+    document.getElementById("logo-url-input").value = url;
+    const prev = document.getElementById("logo-preview");
+    if(prev){ prev.src = url; prev.style.display = "block"; }
+    if(statusEl) statusEl.textContent = "✅ Uploaded — click Save Branding to apply";
+  }catch(e){
+    console.error("Logo upload failed:",e);
+    if(statusEl) statusEl.textContent = "❌ Upload failed — check Firebase Storage is enabled";
+  }
+}
+
 function saveRoles(){
   try{localStorage.setItem("bbhm-roles-v1",JSON.stringify({roles:ROLES,rc:RC}));}catch(e){}
   if(!canWrite()) return;
@@ -789,6 +860,9 @@ function toggleEditMode(){
 function openCustomizeModal(){
   document.getElementById("customize-modal").classList.add("show");
   document.getElementById("logo-url-input").value=brand.logoUrl||"";
+  const st=document.getElementById("logo-upload-status"); if(st) st.textContent="";
+  const pv=document.getElementById("logo-preview");
+  if(pv){ if(brand.logoUrl){ pv.src=brand.logoUrl; pv.style.display="block"; } else { pv.style.display="none"; } }
   document.getElementById("company-name-input").value=brand.companyName||DEFAULT_BRAND.companyName;
   document.getElementById("customize-confirm-btn").style.background=brand.primary;
   renderSwatches("primary-swatches",PRIMARY_SWATCHES,"primary");
@@ -1923,8 +1997,14 @@ function renderTrainingSteps(sop,container){
             ${item.type!=="note"?`<input class="training-input" style="margin-top:0;" value="${(item.label||'').replace(/"/g,'&quot;')}" placeholder="Label" onchange="updateTrainingItem(${si},${ii},'label',this.value)"/>` :""}
           </div>
           ${item.type==="video"?`<input class="training-input" value="${(item.url||'').replace(/"/g,'&quot;')}" placeholder="YouTube or Loom URL..." onchange="updateTrainingItem(${si},${ii},'url',this.value)"/>` :""}
-          ${item.type==="image"?`<input class="training-input" value="${(item.url||'').replace(/"/g,'&quot;')}" placeholder="Image URL (imgur.com)..." onchange="updateTrainingItem(${si},${ii},'url',this.value)"/>` :""}
-          ${item.type==="file"?`<input class="training-input" style="border-color:#C0392B;background:#FFF5F5;" value="${(item.url||'').replace(/"/g,'&quot;')}" placeholder="PDF or document URL (Google Drive, Dropbox, etc.)..." onchange="updateTrainingItem(${si},${ii},'url',this.value)"/><div class="training-textarea-hint" style="color:#C0392B;">💡 Upload to Google Drive → Share → Anyone with link → paste link here</div>` :""}
+          ${item.type==="image"?`<input class="training-input" value="${(item.url||'').replace(/"/g,'&quot;')}" placeholder="Image URL, or upload below..." onchange="updateTrainingItem(${si},${ii},'url',this.value)"/>
+          <label style="background:#7B3FC7;color:#fff;border-radius:7px;padding:6px 13px;font-size:11px;font-weight:700;cursor:pointer;display:inline-block;margin-top:6px;">📤 Upload Image
+            <input type="file" accept="image/*" style="display:none;" onchange="handleTrainingUpload(${si},${ii},this)"/>
+          </label><span id="upl-${si}-${ii}" style="font-size:11px;color:#8AA0BC;margin-left:8px;"></span>` :""}
+          ${item.type==="file"?`<input class="training-input" style="border-color:#C0392B;background:#FFF5F5;" value="${(item.url||'').replace(/"/g,'&quot;')}" placeholder="Document URL, or upload below..." onchange="updateTrainingItem(${si},${ii},'url',this.value)"/>
+          <label style="background:#C0392B;color:#fff;border-radius:7px;padding:6px 13px;font-size:11px;font-weight:700;cursor:pointer;display:inline-block;margin-top:6px;">📤 Upload PDF / Document
+            <input type="file" accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv" style="display:none;" onchange="handleTrainingUpload(${si},${ii},this)"/>
+          </label><span id="upl-${si}-${ii}" style="font-size:11px;color:#8AA0BC;margin-left:8px;"></span>` :""}
           ${item.type==="note"?`<textarea class="training-textarea" onchange="updateTrainingItem(${si},${ii},'label',this.value)">${item.label||''}</textarea><div class="training-textarea-hint">💡 Start each line with • to create a bullet point</div>
           <div style="margin-top:6px;">
             <select class="task-link-select" onchange="setTrainingItemLink(${si},${ii},this.value)">
