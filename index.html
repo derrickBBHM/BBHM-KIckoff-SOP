@@ -386,6 +386,16 @@
       <div style="font-size:10px;color:#8AA0BC;margin-top:4px;font-style:italic;">PNG with transparent background works best</div>
     </div>
     <div class="modal-section"><label class="modal-label">Company Name</label><input class="modal-input" id="company-name-input" style="margin-top:6px;"/></div>
+    <div class="modal-section" style="border-top:1px solid #EEF2F8;padding-top:14px;margin-top:10px;">
+      <label class="modal-label">Backup &amp; Export</label>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;">
+        <button onclick="exportAllData()" style="background:#1A7A4A;color:#fff;border:none;border-radius:8px;padding:9px 15px;font-size:12px;font-weight:700;cursor:pointer;">💾 Download Backup</button>
+        <button onclick="exportAsText()" style="background:#2563A8;color:#fff;border:none;border-radius:8px;padding:9px 15px;font-size:12px;font-weight:700;cursor:pointer;">📄 Readable Text</button>
+        <button onclick="openImportPicker()" style="background:#fff;color:#C0392B;border:1.5px solid #C0392B;border-radius:8px;padding:9px 15px;font-size:12px;font-weight:700;cursor:pointer;">📥 Restore</button>
+        <input type="file" id="import-file-input" accept=".json" style="display:none;" onchange="handleImportFile(this)"/>
+      </div>
+      <div style="font-size:10px;color:#8AA0BC;margin-top:7px;font-style:italic;">The backup (.json) contains everything and can be restored later. The text version is for reading or sharing.</div>
+    </div>
     <div class="modal-btns">
       <button class="modal-cancel-btn" onclick="closeCustomizeModal()">Cancel</button>
       <button class="modal-confirm" id="customize-confirm-btn" onclick="saveCustomize()">Save Branding</button>
@@ -1095,6 +1105,118 @@ function removeRole(i){
   rolesDraft.splice(i,1);
   renderRolesList();
 }
+// ═══════════════════════════════════════════
+// EXPORT / IMPORT — full backup of everything
+// ═══════════════════════════════════════════
+function exportAllData(){
+  const payload = {
+    exportedAt: new Date().toISOString(),
+    version: "bbhm-sop-v1",
+    companyName: brand.companyName,
+    brand: brand,
+    categories: CATS,
+    roles: ROLES,
+    roleColors: RC,
+    workflow: WORKFLOW_STEPS,
+    sops: SOPS
+  };
+  const json = JSON.stringify(payload, null, 2);
+  const blob = new Blob([json], {type:"application/json"});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  const date = new Date().toISOString().slice(0,10);
+  a.href = url;
+  a.download = `SOP-Hub-Backup-${date}.json`;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url), 5000);
+}
+
+// Human-readable text version — useful for reading or handing to someone
+function exportAsText(){
+  let out = `${brand.companyName} — Standard Operating Procedures\n`;
+  out += `Exported ${new Date().toLocaleDateString()}\n`;
+  out += "=".repeat(60) + "\n\n";
+  CATS.forEach(cat=>{
+    const catSops = SOPS.filter(s=>s.category===cat.id).sort((a,b)=>(a.order||0)-(b.order||0));
+    if(catSops.length===0) return;
+    out += `\n${cat.icon} ${cat.label.toUpperCase()}\n${"-".repeat(60)}\n\n`;
+    catSops.forEach(sop=>{
+      out += `${sop.title}\n`;
+      if(sop.desc) out += `${sop.desc}\n`;
+      out += `Owner: ${sop.owner}`;
+      if(sop.trigger) out += ` | Trigger: ${sop.trigger}`;
+      out += `\n`;
+      (sop.steps||[]).forEach((step,i)=>{
+        out += `\n  ${i+1}. ${step.title}\n`;
+        if(sop.isTraining){
+          (step.trainingItems||[]).forEach(it=>{
+            if(it.type==="subheader"){
+              out += `     ## ${it.label}\n`;
+              if(it.body) it.body.split('\n').forEach(l=>{ if(l.trim()) out += `        ${l.trim()}\n`; });
+            } else if(it.type==="note"){
+              (it.label||'').split('\n').forEach(l=>{ if(l.trim()) out += `     ${l.trim()}\n`; });
+            } else if(it.type==="video"){
+              out += `     [VIDEO] ${it.label}${it.url&&!it.url.startsWith('data:')?' — '+it.url:''}\n`;
+            } else if(it.type==="file"){
+              out += `     [DOCUMENT] ${it.label}${it.url&&!it.url.startsWith('data:')?' — '+it.url:''}\n`;
+            } else if(it.type==="image"){
+              out += `     [IMAGE] ${it.label}\n`;
+            }
+          });
+        } else {
+          (step.items||[]).forEach(t=>{
+            out += `     • [${t.role}] ${t.text}\n`;
+            if(t.link){
+              const linked = SOPS.find(s=>s.id===t.link.sopId);
+              if(linked) out += `       → See: ${linked.title}\n`;
+            }
+          });
+        }
+      });
+      out += `\n`;
+    });
+  });
+  const blob = new Blob([out], {type:"text/plain"});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  const date = new Date().toISOString().slice(0,10);
+  a.href = url; a.download = `SOP-Hub-Readable-${date}.txt`;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url), 5000);
+}
+
+function openImportPicker(){
+  const inp = document.getElementById("import-file-input");
+  if(inp){ inp.value = ''; inp.click(); }
+}
+
+async function handleImportFile(inputEl){
+  const file = inputEl.files && inputEl.files[0];
+  if(!file) return;
+  if(!confirm("Importing will REPLACE all current SOPs, categories, roles, and workflow with the contents of this backup.\n\nThis cannot be undone. Continue?")){
+    inputEl.value=''; return;
+  }
+  try{
+    const text = await file.text();
+    const data = JSON.parse(text);
+    if(!data.sops || !Array.isArray(data.sops)) throw new Error("This doesn't look like a SOP Hub backup file.");
+    SOPS = data.sops;
+    if(data.categories) CATS = data.categories;
+    if(data.roles) ROLES = data.roles;
+    if(data.roleColors) RC = Object.assign({}, DEFAULT_RC, data.roleColors);
+    if(data.workflow) WORKFLOW_STEPS = data.workflow;
+    if(data.brand) brand = Object.assign({}, DEFAULT_BRAND, data.brand);
+    saveToLocal(); saveBrandLocal(); saveRoles();
+    alert("✅ Import complete — your data has been restored.");
+    closeCustomizeModal();
+    render();
+  }catch(e){
+    console.error("Import failed:", e);
+    alert("Import failed: " + (e.message || "could not read file"));
+  }
+  inputEl.value='';
+}
+
 function saveRolesEdit(){
   ROLES = [...rolesDraft];
   RC = Object.assign({}, DEFAULT_RC, rcDraft);
