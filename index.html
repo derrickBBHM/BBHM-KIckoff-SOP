@@ -774,6 +774,36 @@ async function uploadFileToStorage(file, folder){
   return await Promise.race([upload,timeout]);
 }
 
+// Opens a document. Base64 data: URLs are blocked by browsers when opened
+// directly in a tab, so convert those to a blob: URL first.
+function openDocUrl(url, filename){
+  if(!url) return;
+  if(url.startsWith("data:")){
+    try{
+      const [meta, b64] = url.split(",");
+      const mime = (meta.match(/data:([^;]+)/)||[])[1] || "application/octet-stream";
+      const bin = atob(b64);
+      const bytes = new Uint8Array(bin.length);
+      for(let i=0;i<bin.length;i++) bytes[i] = bin.charCodeAt(i);
+      const blob = new Blob([bytes], {type: mime});
+      const blobUrl = URL.createObjectURL(blob);
+      const w = window.open(blobUrl, "_blank");
+      if(!w){
+        // Popup blocked — fall back to a direct download
+        const a = document.createElement("a");
+        a.href = blobUrl; a.download = filename || "document";
+        document.body.appendChild(a); a.click(); a.remove();
+      }
+      setTimeout(()=>URL.revokeObjectURL(blobUrl), 60000);
+    }catch(e){
+      console.error("Could not open document:", e);
+      alert("Could not open this document.");
+    }
+  } else {
+    window.open(url, "_blank", "noopener");
+  }
+}
+
 async function handleTrainingUpload(si, ii, inputEl){
   const file = inputEl.files && inputEl.files[0];
   if(!file) return;
@@ -2064,14 +2094,14 @@ function renderTrainingSteps(sop,container){
       if(item.type==="video")return`<div class="training-item ${tc}"><div class="training-item-label">${item.url?'':  `<span class="training-type-badge">${tl}</span>`}${item.label}</div>${item.url?`<a class="training-link-btn" style="background:${brand.primary};" href="${item.url}" target="_blank">▶ Watch Video</a>`:`<span style="font-size:12px;color:#8AA0BC;font-style:italic;">No link yet — add one in edit mode</span>`}</div>`;
       if(item.type==="file"){
         if(!item.url) return`<div class="training-item ${tc}"><div class="training-item-label"><span class="training-type-badge">${tl}</span>${item.label}</div><span style="font-size:12px;color:#8AA0BC;font-style:italic;">No document attached yet — add one in edit mode</span></div>`;
-        return`<a class="doc-card" href="${item.url}" target="_blank" rel="noopener">
+        return`<div class="doc-card" onclick="openDocUrl(${JSON.stringify(item.url).replace(/"/g,'&quot;')}, ${JSON.stringify(item.label||'document').replace(/"/g,'&quot;')})">
           <span class="doc-card-icon">📄</span>
           <span class="doc-card-body">
             <span class="doc-card-title" style="display:block;">${item.label}</span>
             <span class="doc-card-sub">Click to open document</span>
           </span>
           <span class="doc-card-arrow">→</span>
-        </a>`;
+        </div>`;
       }
       if(item.type==="image")return`<div class="training-item ${tc}"><div class="training-item-label">${item.url?'':  `<span class="training-type-badge">${tl}</span>`}${item.label}</div>${item.url?`<img class="training-img" src="${item.url}" alt="${item.label}" onerror="this.style.display='none'"/>`:`<span style="font-size:12px;color:#8AA0BC;font-style:italic;">No image yet</span>`}</div>`;
       const _noteHtml=item.label.split('\n').map(line=>{
